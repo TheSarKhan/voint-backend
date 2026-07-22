@@ -1,0 +1,88 @@
+spring:
+  application:
+    name: voint-backend
+  profiles:
+    default: local
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/voint}
+    username: ${SPRING_DATASOURCE_USERNAME:voint}
+    password: ${SPRING_DATASOURCE_PASSWORD:changeme}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      password: ${SPRING_REDIS_PASSWORD:}
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+voint:
+  jwt:
+    # HS256 secret - MUST be at least 32 bytes. Override in every real environment!
+    secret: ${JWT_SECRET:voint-dev-secret-change-me-0123456789abcdef}
+    access-ttl-minutes: 60
+    refresh-ttl-days: 7
+  vapi:
+    # TODO: verify this shared secret on the webhook once real Vapi integration lands
+    webhook-secret: ${VAPI_WEBHOOK_SECRET:}
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    # Optional pins - leave empty to auto-discover a "flash" / "embedding" model via ListModels.
+    model: ${GEMINI_MODEL:}
+    embedding-model: ${GEMINI_EMBEDDING_MODEL:}
+  soniox:
+    api-key: ${SONIOX_API_KEY:}
+  elevenlabs:
+    api-key: ${ELEVENLABS_API_KEY:}
+  ai:
+    # Folder with prompts + RAG templates (see ai/README.md)
+    folder: ${VOINT_AI_FOLDER:./ai}
+
+logging:
+  level:
+    com.starsoft.voint: DEBUG
+
+---
+# ---- local profile: run against voint-infra services on localhost ----
+spring:
+  config:
+    activate:
+      on-profile: local
+
+---
+# ---- docker profile: run inside docker-compose network (voint-infra) ----
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/voint}
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:redis}
