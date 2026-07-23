@@ -62,10 +62,12 @@ public class VapiEventService {
         String endedReason = message.path("endedReason").asText(null);
         String transcript = message.path("artifact").path("transcript").asText(null);
         String summary = message.path("analysis").path("summary").asText(null);
+        String language = resolveLanguage(message);
 
         Call call = Call.builder()
                 .tenantId(tenantId)
                 .callerNumber(callerNumber)
+                .languageDetected(language)
                 .status(mapStatus(endedReason))
                 .durationSeconds(computeDurationSeconds(startedAt, endedAt))
                 .startedAt(startedAt != null ? startedAt : Instant.now())
@@ -109,6 +111,16 @@ public class VapiEventService {
                     raw, DEFAULT_TENANT_ID);
             return DEFAULT_TENANT_ID;
         }
+    }
+
+    /**
+     * Vapi's end-of-call-report has no top-level "detected language" field (per-word confidence
+     * arrays do, but that's overkill at this stage). Falls back to the assistant's configured
+     * transcriber language, which is currently always "az" for this single-tenant bootstrap setup.
+     */
+    private String resolveLanguage(JsonNode message) {
+        String configured = message.path("assistant").path("transcriber").path("language").asText(null);
+        return (configured != null && !configured.isBlank()) ? configured : "az";
     }
 
     /** Heuristic: anything mentioning a transfer/forward counts as a human handoff, else resolved. */
