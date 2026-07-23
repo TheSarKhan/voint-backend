@@ -1,10 +1,13 @@
 package com.starsoft.voint.voice;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.starsoft.voint.voice.dto.ChatCompletionRequest;
 import com.starsoft.voint.voice.dto.ChatCompletionResponse;
 
@@ -24,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 public class VoiceWebhookController {
 
     private final VoiceWebhookService voiceWebhookService;
+    private final VapiEventService vapiEventService;
 
     @PostMapping({"/webhook", "/chat/completions"})
     @Operation(summary = "Vapi custom-LLM webhook",
@@ -42,5 +46,19 @@ public class VoiceWebhookController {
     public ChatCompletionResponse webhook(@RequestBody ChatCompletionRequest request) {
         // Vapi's shared-secret header is verified upstream by VapiWebhookAuthFilter (see SecurityConfig).
         return voiceWebhookService.handle(request);
+    }
+
+    @PostMapping("/events")
+    @ResponseStatus(HttpStatus.OK)
+    @Operation(summary = "Vapi server event webhook (call lifecycle)",
+            description = """
+                    Configured as the assistant's "server" URL (separate from the custom-LLM completions \
+                    endpoint above). Vapi POSTs call lifecycle events here, wrapped as {"message": {...}}. \
+                    Only "end-of-call-report" is currently handled: it carries the full transcript and AI \
+                    summary once a call ends, which get written to the calls/call_transcripts tables so the \
+                    CRM panel reflects real calls. Every other event type is acknowledged (200 OK) and ignored.""")
+    public void events(@RequestBody JsonNode body) {
+        // Same VapiWebhookAuthFilter secret check as /webhook and /chat/completions (see SecurityConfig).
+        vapiEventService.handle(body);
     }
 }
