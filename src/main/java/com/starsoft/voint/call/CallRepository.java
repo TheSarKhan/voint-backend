@@ -18,6 +18,8 @@ public interface CallRepository extends JpaRepository<Call, UUID> {
 
     long countByTenantIdAndStatus(UUID tenantId, CallStatus status);
 
+    long countByTenantIdAndCallerNumber(UUID tenantId, String callerNumber);
+
     @Query("select avg(c.durationSeconds) from Call c where c.tenantId = :tenantId and c.durationSeconds is not null")
     Double averageDurationSeconds(@Param("tenantId") UUID tenantId);
 }

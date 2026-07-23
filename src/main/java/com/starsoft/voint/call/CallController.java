@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.starsoft.voint.call.dto.CallCreateRequest;
+import com.starsoft.voint.call.dto.CallDetailResponse;
 import com.starsoft.voint.call.dto.CallResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,9 +35,10 @@ public class CallController {
     }
 
     @GetMapping("/{callId}")
-    @Operation(summary = "Get a single call")
-    public CallResponse get(@PathVariable("id") UUID tenantId, @PathVariable UUID callId) {
-        return CallResponse.from(callService.get(tenantId, callId));
+    @Operation(summary = "Get a single call, including its transcript + AI summary when available")
+    public CallDetailResponse get(@PathVariable("id") UUID tenantId, @PathVariable UUID callId) {
+        Call call = callService.get(tenantId, callId);
+        return CallDetailResponse.from(call, callService.getTranscript(call.getId()));
     }
 
     @PostMapping

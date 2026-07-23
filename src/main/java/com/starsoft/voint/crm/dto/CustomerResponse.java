@@ -12,10 +12,11 @@ public record CustomerResponse(
         String name,
         String notes,
         Instant firstSeenAt,
-        Instant lastSeenAt
+        Instant lastSeenAt,
+        long callCount
 ) {
-    public static CustomerResponse from(Customer c) {
+    public static CustomerResponse from(Customer c, long callCount) {
         return new CustomerResponse(c.getId(), c.getTenantId(), c.getPhoneNumber(), c.getName(),
-                c.getNotes(), c.getFirstSeenAt(), c.getLastSeenAt());
+                c.getNotes(), c.getFirstSeenAt(), c.getLastSeenAt(), callCount);
     }
 }

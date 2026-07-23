@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.starsoft.voint.call.CallRepository;
 import com.starsoft.voint.crm.dto.CustomerCreateRequest;
 import com.starsoft.voint.crm.dto.CustomerResponse;
 import com.starsoft.voint.crm.dto.CustomerUpdateRequest;
@@ -29,17 +30,18 @@ import lombok.RequiredArgsConstructor;
 public class CustomerController {
 
     private final CustomerService customerService;
+    private final CallRepository callRepository;
 
     @GetMapping
     @Operation(summary = "List customers of the tenant")
     public List<CustomerResponse> list(@PathVariable("id") UUID tenantId) {
-        return customerService.list(tenantId).stream().map(CustomerResponse::from).toList();
+        return customerService.list(tenantId).stream().map(this::toResponse).toList();
     }
 
     @GetMapping("/{customerId}")
     @Operation(summary = "Get a customer card")
     public CustomerResponse get(@PathVariable("id") UUID tenantId, @PathVariable UUID customerId) {
-        return CustomerResponse.from(customerService.get(tenantId, customerId));
+        return toResponse(customerService.get(tenantId, customerId));
     }
 
     @PostMapping
@@ -47,7 +49,7 @@ public class CustomerController {
     @Operation(summary = "Create a customer card")
     public CustomerResponse create(@PathVariable("id") UUID tenantId,
                                    @Valid @RequestBody CustomerCreateRequest request) {
-        return CustomerResponse.from(customerService.create(tenantId, request));
+        return toResponse(customerService.create(tenantId, request));
     }
 
     @PatchMapping("/{customerId}")
@@ -55,6 +57,12 @@ public class CustomerController {
     public CustomerResponse update(@PathVariable("id") UUID tenantId,
                                    @PathVariable UUID customerId,
                                    @RequestBody CustomerUpdateRequest request) {
-        return CustomerResponse.from(customerService.update(tenantId, customerId, request));
+        return toResponse(customerService.update(tenantId, customerId, request));
+    }
+
+    /** callCount is computed on the fly (bootstrap data scale - no batching/joins needed yet). */
+    private CustomerResponse toResponse(Customer customer) {
+        long callCount = callRepository.countByTenantIdAndCallerNumber(customer.getTenantId(), customer.getPhoneNumber());
+        return CustomerResponse.from(customer, callCount);
     }
 }
