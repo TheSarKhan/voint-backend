@@ -31,7 +31,10 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class VapiWebhookAuthFilter extends OncePerRequestFilter {
 
+    // Both paths hit the same controller method (see VoiceWebhookController) - /chat/completions
+    // exists because Vapi's custom-LLM integration appends that suffix to the configured base URL.
     private static final String WEBHOOK_PATH = "/api/v1/voice/webhook";
+    private static final String CHAT_COMPLETIONS_PATH = "/api/v1/voice/chat/completions";
 
     private final VapiWebhookVerifier verifier;
     private final ObjectMapper objectMapper;
@@ -40,7 +43,9 @@ public class VapiWebhookAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        if (WEBHOOK_PATH.equals(request.getRequestURI()) && verifier.isEnabled() && !verifier.verify(request)) {
+        String uri = request.getRequestURI();
+        boolean isWebhookRequest = WEBHOOK_PATH.equals(uri) || CHAT_COMPLETIONS_PATH.equals(uri);
+        if (isWebhookRequest && verifier.isEnabled() && !verifier.verify(request)) {
             log.warn("Rejected Vapi webhook request from {} - missing/invalid {} header",
                     request.getRemoteAddr(), SharedSecretVapiWebhookVerifier.SECRET_HEADER);
             writeUnauthorized(response);

@@ -25,7 +25,7 @@ public class VoiceWebhookController {
 
     private final VoiceWebhookService voiceWebhookService;
 
-    @PostMapping("/webhook")
+    @PostMapping({"/webhook", "/chat/completions"})
     @Operation(summary = "Vapi custom-LLM webhook",
             description = """
                     Accepts an OpenAI-compatible chat completion request (model, messages, stream, call metadata) \
@@ -36,7 +36,9 @@ public class VoiceWebhookController {
                     tenant (11111111-1111-1111-1111-111111111111) and logs a warning. Real multi-tenant routing \
                     (e.g. by the caller's dialed phone number) is a TODO for a later stage. \
                     Without GEMINI_API_KEY configured, falls back to MockLlmClient ('mock cavab: {last user message}'). \
-                    Streaming is not supported yet - stream:true still gets a non-streaming JSON body.""")
+                    Streaming is not supported yet - stream:true still gets a non-streaming JSON body. \
+                    Also mounted at /chat/completions since Vapi's custom-LLM integration treats the configured \
+                    URL as an OpenAI-client baseURL and appends that path itself.""")
     public ChatCompletionResponse webhook(@RequestBody ChatCompletionRequest request) {
         // Vapi's shared-secret header is verified upstream by VapiWebhookAuthFilter (see SecurityConfig).
         return voiceWebhookService.handle(request);
