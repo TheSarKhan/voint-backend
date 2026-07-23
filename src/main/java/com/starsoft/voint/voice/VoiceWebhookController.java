@@ -38,7 +38,7 @@ public class VoiceWebhookController {
                     Without GEMINI_API_KEY configured, falls back to MockLlmClient ('mock cavab: {last user message}'). \
                     Streaming is not supported yet - stream:true still gets a non-streaming JSON body.""")
     public ChatCompletionResponse webhook(@RequestBody ChatCompletionRequest request) {
-        // TODO: verify VAPI_WEBHOOK_SECRET header once real Vapi integration lands.
+        // Vapi's shared-secret header is verified upstream by VapiWebhookAuthFilter (see SecurityConfig).
         return voiceWebhookService.handle(request);
     }
 }

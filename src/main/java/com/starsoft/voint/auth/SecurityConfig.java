@@ -10,12 +10,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import com.starsoft.voint.voice.VapiWebhookAuthFilter;
+
 import lombok.RequiredArgsConstructor;
 
 /**
  * Bootstrap security: stateless JWT, permitAll on the Vapi webhook, auth,
  * Swagger and actuator; everything else requires a bearer token.
- * TODO: verify VAPI_WEBHOOK_SECRET on the webhook instead of plain permitAll.
+ * The Vapi webhook is permitAll at the Spring Security authorization level (Vapi's cloud
+ * infrastructure can't present a panel JWT) but is still protected by {@link VapiWebhookAuthFilter},
+ * which enforces the {@code VAPI_WEBHOOK_SECRET} shared-secret header once one is configured.
  */
 @Configuration
 @EnableWebSecurity
@@ -23,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final VapiWebhookAuthFilter vapiWebhookAuthFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -41,6 +46,7 @@ public class SecurityConfig {
                                 "/error"
                         ).permitAll()
                         .anyRequest().authenticated())
+                .addFilterBefore(vapiWebhookAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

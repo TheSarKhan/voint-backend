@@ -49,7 +49,10 @@ voint:
     access-ttl-minutes: 60
     refresh-ttl-days: 7
   vapi:
-    # TODO: verify this shared secret on the webhook once real Vapi integration lands
+    # Shared secret verified against the incoming "x-vapi-secret" header on every request to
+    # /api/v1/voice/webhook (see VapiWebhookAuthFilter). Blank/unset = verification disabled
+    # (bootstrap default, logs a startup WARN) - set this to Vapi's "Server URL Secret" before
+    # exposing the backend publicly.
     webhook-secret: ${VAPI_WEBHOOK_SECRET:}
   gemini:
     api-key: ${GEMINI_API_KEY:}
