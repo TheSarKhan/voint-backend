@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.starsoft.voint.auth.TenantAccessGuard;
 import com.starsoft.voint.rag.dto.RagDocumentCreateRequest;
 import com.starsoft.voint.rag.dto.RagDocumentResponse;
 
@@ -28,18 +29,21 @@ import lombok.RequiredArgsConstructor;
 public class RagController {
 
     private final RagService ragService;
+    private final TenantAccessGuard tenantAccessGuard;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Add a RAG document for the tenant (embedding computed in a later stage)")
     public RagDocumentResponse create(@PathVariable("id") UUID tenantId,
                                       @Valid @RequestBody RagDocumentCreateRequest request) {
+        tenantAccessGuard.requireAccess(tenantId);
         return RagDocumentResponse.from(ragService.create(tenantId, request));
     }
 
     @GetMapping
     @Operation(summary = "List all RAG documents of the tenant")
     public List<RagDocumentResponse> list(@PathVariable("id") UUID tenantId) {
+        tenantAccessGuard.requireAccess(tenantId);
         return ragService.list(tenantId).stream().map(RagDocumentResponse::from).toList();
     }
 
@@ -47,6 +51,7 @@ public class RagController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete a RAG document")
     public void delete(@PathVariable("id") UUID tenantId, @PathVariable UUID docId) {
+        tenantAccessGuard.requireAccess(tenantId);
         ragService.delete(tenantId, docId);
     }
 }

@@ -1,5 +1,6 @@
 package com.starsoft.voint.tenant;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.starsoft.voint.auth.TenantAccessGuard;
 import com.starsoft.voint.tenant.dto.TenantConfigUpdateRequest;
 import com.starsoft.voint.tenant.dto.TenantCreateRequest;
 import com.starsoft.voint.tenant.dto.TenantResponse;
@@ -28,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 public class TenantController {
 
     private final TenantService tenantService;
+    private final TenantAccessGuard tenantAccessGuard;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -36,9 +39,17 @@ public class TenantController {
         return TenantResponse.from(tenantService.create(request));
     }
 
+    @GetMapping
+    @Operation(summary = "List all tenants (SUPER_ADMIN only)")
+    public List<TenantResponse> list() {
+        tenantAccessGuard.requireSuperAdmin();
+        return tenantService.list().stream().map(TenantResponse::from).toList();
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get tenant by id")
     public TenantResponse get(@PathVariable UUID id) {
+        tenantAccessGuard.requireAccess(id);
         return TenantResponse.from(tenantService.get(id));
     }
 
@@ -46,6 +57,7 @@ public class TenantController {
     @Operation(summary = "Update tenant configuration (greeting, working hours, handoff, languages)")
     public TenantResponse updateConfig(@PathVariable UUID id,
                                        @RequestBody TenantConfigUpdateRequest request) {
+        tenantAccessGuard.requireAccess(id);
         return TenantResponse.from(tenantService.updateConfig(id, request));
     }
 }

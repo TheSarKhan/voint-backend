@@ -45,6 +45,14 @@ public class GlobalExceptionHandler {
         return pd;
     }
 
+    @ExceptionHandler(TenantAccessDeniedException.class)
+    public ProblemDetail handleTenantAccessDenied(TenantAccessDeniedException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        pd.setTitle("Access denied");
+        pd.setType(URI.create("https://voint.starsoft.com/errors/forbidden"));
+        return pd;
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());

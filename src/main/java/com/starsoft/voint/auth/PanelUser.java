@@ -29,7 +29,8 @@ public class PanelUser {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "tenant_id", nullable = false)
+    /** Nullable: a platform-wide SUPER_ADMIN isn't scoped to any single tenant. */
+    @Column(name = "tenant_id")
     private UUID tenantId;
 
     @Column(nullable = false, unique = true)

@@ -2,6 +2,7 @@ package com.starsoft.voint.auth;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -20,9 +21,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Simple bearer-token filter: parses "Authorization: Bearer <jwt>", puts the
- * email + role into the SecurityContext. Invalid/absent tokens just continue
- * unauthenticated (protected endpoints then return 401/403).
+ * Simple bearer-token filter: parses "Authorization: Bearer <jwt>", puts an
+ * {@link AuthenticatedUser} (email + tenantId + role) into the SecurityContext as the
+ * Authentication principal. Invalid/absent tokens just continue unauthenticated
+ * (protected endpoints then return 401/403).
  */
 @Slf4j
 @Component
@@ -43,8 +45,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 if (!jwtService.isRefreshToken(claims)) {
                     String email = claims.getSubject();
                     String role = claims.get("role", String.class);
+                    String tenantIdClaim = claims.get("tenantId", String.class);
+                    UUID tenantId = tenantIdClaim != null ? UUID.fromString(tenantIdClaim) : null;
+                    var principal = new AuthenticatedUser(email, tenantId, role);
                     var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + (role != null ? role : "USER")));
-                    var authentication = new UsernamePasswordAuthenticationToken(email, null, authorities);
+                    var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.starsoft.voint.auth.TenantAccessGuard;
 import com.starsoft.voint.reservation.dto.ReservationResponse;
 import com.starsoft.voint.reservation.dto.ReservationUpdateRequest;
 
@@ -25,10 +26,12 @@ import lombok.RequiredArgsConstructor;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final TenantAccessGuard tenantAccessGuard;
 
     @GetMapping
     @Operation(summary = "List reservation requests of the tenant")
     public List<ReservationResponse> list(@PathVariable("id") UUID tenantId) {
+        tenantAccessGuard.requireAccess(tenantId);
         return reservationService.list(tenantId).stream().map(ReservationResponse::from).toList();
     }
 
@@ -37,6 +40,7 @@ public class ReservationController {
     public ReservationResponse update(@PathVariable("id") UUID tenantId,
                                       @PathVariable UUID resId,
                                       @Valid @RequestBody ReservationUpdateRequest request) {
+        tenantAccessGuard.requireAccess(tenantId);
         return ReservationResponse.from(reservationService.updateStatus(tenantId, resId, request));
     }
 }

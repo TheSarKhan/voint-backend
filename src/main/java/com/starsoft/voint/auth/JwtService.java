@@ -48,16 +48,18 @@ public class JwtService {
 
     private String buildToken(PanelUser user, Duration ttl, String type) {
         Instant now = Instant.now();
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(user.getEmail())
                 .claim("uid", user.getId().toString())
-                .claim("tenantId", user.getTenantId().toString())
                 .claim("role", user.getRole())
                 .claim("type", type)
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(ttl)))
-                .signWith(key)
-                .compact();
+                .expiration(Date.from(now.plus(ttl)));
+        // tenantId is nullable: a platform-wide SUPER_ADMIN isn't scoped to a single tenant.
+        if (user.getTenantId() != null) {
+            builder.claim("tenantId", user.getTenantId().toString());
+        }
+        return builder.signWith(key).compact();
     }
 
     /** Parses and validates signature + expiry; throws JwtException on failure. */

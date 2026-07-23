@@ -1,5 +1,6 @@
 package com.starsoft.voint.tenant;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -28,6 +29,11 @@ public class TenantService {
                 .languageConfig(request.languageConfig())
                 .build();
         return tenantRepository.save(tenant);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Tenant> list() {
+        return tenantRepository.findAll();
     }
 
     @Transactional(readOnly = true)
