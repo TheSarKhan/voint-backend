@@ -11,4 +11,6 @@ public interface ReservationRepository extends JpaRepository<ReservationRequest,
     List<ReservationRequest> findByTenantIdOrderByCreatedAtDesc(UUID tenantId);
 
     Optional<ReservationRequest> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    long countByTenantId(UUID tenantId);
 }
