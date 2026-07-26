@@ -1,11 +1,19 @@
 package com.starsoft.voint.voice;
 
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starsoft.voint.llm.GeminiApiClient;
 import com.starsoft.voint.llm.LlmClient;
 import com.starsoft.voint.llm.LlmResult;
@@ -14,6 +22,7 @@ import com.starsoft.voint.rag.RagDocumentRepository;
 import com.starsoft.voint.rag.VectorUtils;
 import com.starsoft.voint.tenant.Tenant;
 import com.starsoft.voint.tenant.TenantRepository;
+import com.starsoft.voint.voice.dto.ChatCompletionChunk;
 import com.starsoft.voint.voice.dto.ChatCompletionRequest;
 import com.starsoft.voint.voice.dto.ChatCompletionResponse;
 import com.starsoft.voint.voice.dto.ChatMessage;
@@ -41,6 +50,10 @@ public class VoiceWebhookService {
 
     private static final int RAG_TOP_K = 4;
 
+    /** Sentence end (incl. Azerbaijani text) followed by whitespace — one speech unit per frame. */
+    private static final Pattern SENTENCE = Pattern.compile("[^.!?\\n]*[.!?\\n]+\\s*");
+
+    private final ObjectMapper objectMapper;
     private final LlmClient llmClient;
     private final GeminiApiClient geminiApiClient;
     private final RagDocumentRepository ragDocumentRepository;
@@ -48,12 +61,64 @@ public class VoiceWebhookService {
     private final PromptLoader promptLoader;
 
     public ChatCompletionResponse handle(ChatCompletionRequest request) {
-        if (Boolean.TRUE.equals(request.stream())) {
-            // TODO: support SSE streaming (chat.completion.chunk) in a later stage.
-            // For now we always answer with a single non-streaming JSON body.
-            log.warn("stream=true requested but streaming is not implemented yet - returning non-streaming JSON");
-        }
+        return ChatCompletionResponse.assistantMessage(request.model(), generateAnswer(request));
+    }
 
+    /**
+     * Streaming variant for {@code "stream": true}. Vapi drives us through an OpenAI client, which
+     * on a streaming request refuses to read a plain JSON body — the agent then has nothing to say
+     * and the call dies with {@code silence-timed-out}.
+     *
+     * Gemini is still called once for the whole answer; we then emit it sentence by sentence so
+     * Vapi can start speaking the first sentence without waiting for the last.
+     * TODO (later): stream from Gemini itself (streamGenerateContent) to cut time-to-first-word.
+     */
+    public StreamingResponseBody handleStreaming(ChatCompletionRequest request) {
+        String answer = generateAnswer(request);
+        String id = "chatcmpl-" + UUID.randomUUID();
+        String model = request.model() != null ? request.model() : "voint-agent";
+
+        return out -> {
+            try (var writer = new OutputStreamWriter(out, StandardCharsets.UTF_8)) {
+                boolean first = true;
+                for (String piece : splitForSpeech(answer)) {
+                    writeFrame(writer, ChatCompletionChunk.content(id, model, piece, first));
+                    first = false;
+                }
+                writeFrame(writer, ChatCompletionChunk.stop(id, model));
+                writer.write("data: [DONE]\n\n");
+                writer.flush();
+            }
+        };
+    }
+
+    private void writeFrame(OutputStreamWriter writer, ChatCompletionChunk chunk) throws IOException {
+        writer.write("data: " + objectMapper.writeValueAsString(chunk) + "\n\n");
+        writer.flush();
+    }
+
+    /**
+     * Splits on sentence endings, keeping the punctuation, so each frame is a natural speech unit.
+     * Falls back to the whole string when there is nothing to split on.
+     */
+    private List<String> splitForSpeech(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of("");
+        }
+        List<String> parts = new ArrayList<>();
+        Matcher m = SENTENCE.matcher(text);
+        int last = 0;
+        while (m.find()) {
+            parts.add(text.substring(last, m.end()));
+            last = m.end();
+        }
+        if (last < text.length()) {
+            parts.add(text.substring(last));
+        }
+        return parts.isEmpty() ? List.of(text) : parts;
+    }
+
+    private String generateAnswer(ChatCompletionRequest request) {
         UUID tenantId = resolveTenantId(request);
         Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
         if (tenant == null) {
@@ -67,7 +132,7 @@ public class VoiceWebhookService {
         String prompt = buildPrompt(language, ragContext, request.messages(), tenant);
         LlmResult result = callLlm(prompt, userText);
 
-        return ChatCompletionResponse.assistantMessage(request.model(), result.content());
+        return result.content();
     }
 
     /** Latest user utterance = the text Vapi transcribed from the caller. */
