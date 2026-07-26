@@ -1,0 +1,43 @@
+name: Build və deploy
+
+# main-ə push olunanda: əvvəlcə Maven ilə kompilyasiya yoxlanılır, uğurlu olsa
+# serverə deploy edilir (orada Docker image yenidən qurulur).
+# Serverdə həmçinin hər dəqiqə işləyən systemd taymeri var (voint-deploy.timer) —
+# bu workflow onunla eyni skripti çağırır, sadəcə gözləmədən, dərhal.
+# Yəni Actions sıradan çıxsa belə deploy dayanmır, sadəcə 60 saniyəyə qədər gecikir.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Kompilyasiya xətası varsa burada tutulur, serverə çatmır.
+      - run: ./mvnw -B -DskipTests package
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Serverdə deploy skriptini işə sal
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 173.249.54.197
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          # Backend image-i qurmaq bir neçə dəqiqə çəkə bilər
+          command_timeout: 20m
+          script: /opt/voint/deploy.sh
