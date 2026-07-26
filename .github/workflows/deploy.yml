@@ -37,7 +37,7 @@ jobs:
         with:
           host: 173.249.54.197
           username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
+          key: ${{ secrets.SSH_KEY }}
           # Backend image-i qurmaq bir neçə dəqiqə çəkə bilər
           command_timeout: 20m
           script: /opt/voint/deploy.sh
