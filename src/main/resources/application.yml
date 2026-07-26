@@ -66,6 +66,18 @@ voint:
   ai:
     # Folder with prompts + RAG templates (see ai/README.md)
     folder: ${VOINT_AI_FOLDER:./ai}
+  billing:
+    # What each provider charges us, in USD (their own published units). Update these when a
+    # provider changes its price list - nothing else in the code hardcodes a rate.
+    usd-to-azn: ${VOINT_USD_TO_AZN:1.70}
+    tts-per-1k-chars: ${VOINT_RATE_TTS:0.10}          # ElevenLabs PAYG, multilingual v2/v3
+    llm-input-per-1m-tokens: ${VOINT_RATE_LLM_IN:0.30}   # Gemini 2.5 Flash
+    llm-output-per-1m-tokens: ${VOINT_RATE_LLM_OUT:2.50}
+    vapi-per-minute: ${VOINT_RATE_VAPI:0.05}
+    stt-per-minute: ${VOINT_RATE_STT:0.002}           # Soniox real-time, $0.12/hour
+    telephony-per-minute: ${VOINT_RATE_TELEPHONY:0.01}
+    # Month boundaries are local to the business: "July" must mean July in Baku, not UTC.
+    zone: ${VOINT_BILLING_ZONE:Asia/Baku}
   cors:
     # Comma-separated origins allowed to call the API from a browser (voint-panel's dev server
     # on 5173, voint-admin's on 5180, by default). Add deployed panel URLs here once they exist.

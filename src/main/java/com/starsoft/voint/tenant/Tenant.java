@@ -1,5 +1,6 @@
 package com.starsoft.voint.tenant;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -51,6 +52,21 @@ public class Tenant {
     /** Language settings (JSON string for now, e.g. {"default":"az","supported":["az","ru","en"]}). */
     @Column(name = "language_config")
     private String languageConfig;
+
+    /** Fixed monthly charge in AZN, billed whether or not the tenant makes any calls. */
+    @Column(name = "monthly_fee", nullable = false)
+    @Builder.Default
+    private BigDecimal monthlyFee = BigDecimal.ZERO;
+
+    /** Call minutes covered by {@link #monthlyFee} before overage applies. */
+    @Column(name = "included_minutes", nullable = false)
+    @Builder.Default
+    private int includedMinutes = 0;
+
+    /** AZN charged per minute beyond {@link #includedMinutes}. */
+    @Column(name = "overage_per_minute", nullable = false)
+    @Builder.Default
+    private BigDecimal overagePerMinute = BigDecimal.ZERO;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

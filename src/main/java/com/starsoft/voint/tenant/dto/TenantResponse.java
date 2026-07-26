@@ -1,5 +1,6 @@
 package com.starsoft.voint.tenant.dto;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -13,10 +14,14 @@ public record TenantResponse(
         String workingHours,
         String handoffNumber,
         String languageConfig,
+        BigDecimal monthlyFee,
+        Integer includedMinutes,
+        BigDecimal overagePerMinute,
         Instant createdAt
 ) {
     public static TenantResponse from(Tenant t) {
         return new TenantResponse(t.getId(), t.getName(), t.getPhoneNumber(), t.getGreetingText(),
-                t.getWorkingHours(), t.getHandoffNumber(), t.getLanguageConfig(), t.getCreatedAt());
+                t.getWorkingHours(), t.getHandoffNumber(), t.getLanguageConfig(),
+                t.getMonthlyFee(), t.getIncludedMinutes(), t.getOveragePerMinute(), t.getCreatedAt());
     }
 }

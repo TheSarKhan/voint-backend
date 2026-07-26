@@ -22,6 +22,7 @@ import com.starsoft.voint.rag.RagDocumentRepository;
 import com.starsoft.voint.rag.VectorUtils;
 import com.starsoft.voint.tenant.Tenant;
 import com.starsoft.voint.tenant.TenantRepository;
+import com.starsoft.voint.usage.UsageRecorder;
 import com.starsoft.voint.voice.dto.ChatCompletionChunk;
 import com.starsoft.voint.voice.dto.ChatCompletionRequest;
 import com.starsoft.voint.voice.dto.ChatCompletionResponse;
@@ -59,6 +60,7 @@ public class VoiceWebhookService {
     private final RagDocumentRepository ragDocumentRepository;
     private final TenantRepository tenantRepository;
     private final PromptLoader promptLoader;
+    private final UsageRecorder usageRecorder;
 
     public ChatCompletionResponse handle(ChatCompletionRequest request) {
         return ChatCompletionResponse.assistantMessage(request.model(), generateAnswer(request));
@@ -145,7 +147,14 @@ public class VoiceWebhookService {
         String prompt = buildPrompt(language, ragContext, request.messages(), tenant);
         LlmResult result = callLlm(prompt, userText);
 
-        return result.content();
+        String answer = result.content();
+        // Meter this turn. The answer is verbatim what Vapi hands to the TTS engine, so its
+        // length is the exact number of characters the voice provider will bill for - no estimate.
+        usageRecorder.record(tenantId, UsageRecorder.extractVapiCallId(request.call()),
+                result.promptTokens(), result.completionTokens(),
+                answer != null ? answer.length() : 0);
+
+        return answer;
     }
 
     /** Latest user utterance = the text Vapi transcribed from the caller. */
