@@ -9,10 +9,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.starsoft.voint.voice.dto.ChatCompletionRequest;
-import com.starsoft.voint.voice.dto.ChatCompletionResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,22 +43,29 @@ public class VoiceWebhookController {
                     tenant (11111111-1111-1111-1111-111111111111) and logs a warning. Real multi-tenant routing \
                     (e.g. by the caller's dialed phone number) is a TODO for a later stage. \
                     Without GEMINI_API_KEY configured, falls back to MockLlmClient ('mock cavab: {last user message}'). \
-                    Streaming is not supported yet - stream:true still gets a non-streaming JSON body. \
                     Also mounted at /chat/completions since Vapi's custom-LLM integration treats the configured \
                     URL as an OpenAI-client baseURL and appends that path itself. \
                     When the request carries "stream": true the reply is Server-Sent Events \
                     (chat.completion.chunk frames, then [DONE]) instead of a single JSON body — Vapi's \
                     OpenAI client will not read a plain body on a streaming request, which leaves the \
                     agent silent and ends the call with silence-timed-out.""")
-    public ResponseEntity<?> webhook(@RequestBody ChatCompletionRequest request) {
+    public ResponseEntity<StreamingResponseBody> webhook(@RequestBody ChatCompletionRequest request) {
         // Vapi's shared-secret header is verified upstream by VapiWebhookAuthFilter (see SecurityConfig).
+        //
+        // The declared return type must be ResponseEntity<StreamingResponseBody>, not
+        // ResponseEntity<?>: Spring picks the streaming return-value handler off the DECLARED
+        // generic type, and with a wildcard it falls through to the message converters instead,
+        // failing with "No converter for ... with preset Content-Type 'text/event-stream'".
+        // So the non-streaming reply is written through the same channel, just as JSON.
         if (Boolean.TRUE.equals(request.stream())) {
             return ResponseEntity.ok()
                     .contentType(MediaType.TEXT_EVENT_STREAM)
                     .cacheControl(CacheControl.noCache())
                     .body(voiceWebhookService.handleStreaming(request));
         }
-        return ResponseEntity.ok(voiceWebhookService.handle(request));
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(voiceWebhookService.handleAsJsonBody(request));
     }
 
     @PostMapping("/events")

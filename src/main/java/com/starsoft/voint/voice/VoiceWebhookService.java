@@ -65,6 +65,19 @@ public class VoiceWebhookService {
     }
 
     /**
+     * Same plain (non-streaming) reply as {@link #handle}, but written straight to the response
+     * stream. The controller has to declare a single return type for both paths (see the note
+     * there), so the JSON case travels through the streaming channel too.
+     */
+    public StreamingResponseBody handleAsJsonBody(ChatCompletionRequest request) {
+        ChatCompletionResponse response = handle(request);
+        return out -> {
+            out.write(objectMapper.writeValueAsBytes(response));
+            out.flush();
+        };
+    }
+
+    /**
      * Streaming variant for {@code "stream": true}. Vapi drives us through an OpenAI client, which
      * on a streaming request refuses to read a plain JSON body — the agent then has nothing to say
      * and the call dies with {@code silence-timed-out}.
