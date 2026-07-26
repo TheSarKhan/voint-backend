@@ -150,7 +150,9 @@ public class VoiceWebhookService {
         String answer = result.content();
         // Meter this turn. The answer is verbatim what Vapi hands to the TTS engine, so its
         // length is the exact number of characters the voice provider will bill for - no estimate.
-        usageRecorder.record(tenantId, UsageRecorder.extractVapiCallId(request.call()),
+        // tenant != null guards the usage_events foreign key: this method deliberately answers
+        // even for an unknown tenant id, and a metering insert must not be what breaks the call.
+        usageRecorder.record(tenantId, tenant != null, UsageRecorder.extractVapiCallId(request.call()),
                 result.promptTokens(), result.completionTokens(),
                 answer != null ? answer.length() : 0);
 

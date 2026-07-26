@@ -4,8 +4,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,32 +11,41 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Writes one {@link UsageEvent} per conversation turn.
  *
- * <p>Metering must never take a live call down: if the write fails the caller still gets its
+ * <p>Metering must never take a live call down. If the write fails the caller still gets its
  * answer and we lose one turn from the bill, which is strictly better than dropping the call.
- * That is also why this runs in its own transaction - a metering failure cannot poison whatever
- * the voice pipeline is doing around it.
+ *
+ * <p>The catch therefore sits <em>outside</em> the transaction, in this class, while the actual
+ * insert happens in {@link UsageWriter}. Catching inside a {@code @Transactional} method would not
+ * work: a failed insert marks the transaction rollback-only and Hibernate may defer the statement
+ * to flush time, so the exception surfaces when the proxy commits - after any inner catch block
+ * has already been passed.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UsageRecorder {
 
-    private final UsageEventRepository usageEventRepository;
+    private final UsageWriter usageWriter;
 
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void record(UUID tenantId, String vapiCallId, int promptTokens, int completionTokens,
-                       int ttsCharacters) {
+    /**
+     * @param tenantExists whether the resolved tenant is actually a row in {@code tenants}. The
+     *                     voice pipeline tolerates an unknown tenant id and answers anyway, but
+     *                     inserting a usage row for one would violate the foreign key - and that
+     *                     failure would arrive mid-call.
+     */
+    public void record(UUID tenantId, boolean tenantExists, String vapiCallId, int promptTokens,
+                       int completionTokens, int ttsCharacters) {
         if (tenantId == null) {
             return;
         }
+        if (!tenantExists) {
+            log.warn("Skipping usage metering for unknown tenant {} - {} TTS chars and {} tokens on "
+                            + "vapi call {} will not be billed to anyone.",
+                    tenantId, ttsCharacters, promptTokens + completionTokens, vapiCallId);
+            return;
+        }
         try {
-            usageEventRepository.save(UsageEvent.builder()
-                    .tenantId(tenantId)
-                    .vapiCallId(vapiCallId)
-                    .promptTokens(promptTokens)
-                    .completionTokens(completionTokens)
-                    .ttsCharacters(ttsCharacters)
-                    .build());
+            usageWriter.write(tenantId, vapiCallId, promptTokens, completionTokens, ttsCharacters);
         } catch (Exception e) {
             log.error("Could not record usage for tenant {} (vapi call {}): {} prompt + {} completion "
                             + "tokens, {} TTS chars. The call is unaffected, but this turn will be "
