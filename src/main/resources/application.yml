@@ -62,7 +62,11 @@ voint:
   soniox:
     api-key: ${SONIOX_API_KEY:}
   elevenlabs:
+    # Not used to synthesise anything - Vapi holds its own copy of this key and does the calling.
+    # It is configured here purely so ProviderHealthService can verify the key is still alive,
+    # because nothing else in this backend would ever touch it until a call breaks.
     api-key: ${ELEVENLABS_API_KEY:}
+    voice-id: ${ELEVENLABS_VOICE_ID:}
   ai:
     # Folder with prompts + RAG templates (see ai/README.md)
     folder: ${VOINT_AI_FOLDER:./ai}
