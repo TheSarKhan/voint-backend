@@ -59,11 +59,14 @@ public class TenantController {
         return PageResponse.of(tenantService.search(q, pageable), TenantResponse::from);
     }
 
-    @GetMapping("/{id}")
-    @Operation(summary = "Get tenant by id")
-    public TenantResponse get(@PathVariable UUID id) {
-        tenantAccessGuard.requireAccess(id);
-        return TenantResponse.from(tenantService.get(id));
+    @GetMapping("/{key}")
+    @Operation(summary = "Get a tenant by id or by subdomain")
+    public TenantResponse get(@PathVariable String key) {
+        // Resolve first, then guard on the real id: the caller may have addressed this tenant by
+        // its subdomain, and permission is about which tenant it is, not how it was named.
+        Tenant tenant = tenantService.getByIdOrSubdomain(key);
+        tenantAccessGuard.requireAccess(tenant.getId());
+        return TenantResponse.from(tenant);
     }
 
     @PostMapping("/{id}/vapi-sync")

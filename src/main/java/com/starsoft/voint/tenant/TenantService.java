@@ -67,6 +67,26 @@ public class TenantService {
                 .orElseThrow(() -> NotFoundException.of("Tenant", id));
     }
 
+    /**
+     * Accepts either the UUID or the subdomain, so the admin panel can put a readable name in the
+     * address bar instead of {@code 11111111-1111-1111-1111-111111111111}.
+     *
+     * <p>The two cannot collide: a subdomain must contain at least one letter-or-digit label and is
+     * never 36 characters of hex with dashes in UUID positions, so parsing decides unambiguously.
+     */
+    @Transactional(readOnly = true)
+    public Tenant getByIdOrSubdomain(String key) {
+        if (key == null || key.isBlank()) {
+            throw NotFoundException.of("Tenant", key);
+        }
+        try {
+            return get(UUID.fromString(key.trim()));
+        } catch (IllegalArgumentException notAUuid) {
+            return tenantRepository.findBySubdomainIgnoreCase(key.trim().toLowerCase())
+                    .orElseThrow(() -> NotFoundException.of("Tenant", key));
+        }
+    }
+
     @Transactional
     public Tenant updateConfig(UUID id, TenantConfigUpdateRequest request) {
         Tenant tenant = get(id);
