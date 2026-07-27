@@ -2,6 +2,7 @@ package com.starsoft.voint.voice;
 
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +52,11 @@ public class VoiceWebhookService {
 
     private static final int RAG_TOP_K = 4;
 
+    /** Spoken only when generation failed before a single word reached the caller. */
+    private static final String FALLBACK_ANSWER =
+            "Üzr istəyirəm, texniki problem yarandı. Bir azdan yenidən cəhd edin, "
+                    + "ya da sizi əməkdaşımızla əlaqələndirim.";
+
     /** Sentence end (incl. Azerbaijani text) followed by whitespace — one speech unit per frame. */
     private static final Pattern SENTENCE = Pattern.compile("[^.!?\\n]*[.!?\\n]+\\s*");
 
@@ -84,27 +90,119 @@ public class VoiceWebhookService {
      * on a streaming request refuses to read a plain JSON body — the agent then has nothing to say
      * and the call dies with {@code silence-timed-out}.
      *
-     * Gemini is still called once for the whole answer; we then emit it sentence by sentence so
-     * Vapi can start speaking the first sentence without waiting for the last.
-     * TODO (later): stream from Gemini itself (streamGenerateContent) to cut time-to-first-word.
+     * Everything - RAG, prompt building, the LLM call - happens INSIDE the returned body, and each
+     * sentence goes out the moment Gemini produces it. Doing the work before returning would make
+     * Spring hold the response until the full answer existed: the caller hears dead air for the
+     * whole generation, Vapi reports a "hang", and people hang up on what sounds like a dead line.
+     * What matters on a phone call is latency to the first word, not to the last.
      */
     public StreamingResponseBody handleStreaming(ChatCompletionRequest request) {
-        String answer = generateAnswer(request);
         String id = "chatcmpl-" + UUID.randomUUID();
         String model = request.model() != null ? request.model() : "voint-agent";
 
         return out -> {
+            long startedAt = System.currentTimeMillis();
             try (var writer = new OutputStreamWriter(out, StandardCharsets.UTF_8)) {
-                boolean first = true;
-                for (String piece : splitForSpeech(answer)) {
-                    writeFrame(writer, ChatCompletionChunk.content(id, model, piece, first));
-                    first = false;
-                }
+                streamAnswer(request, writer, id, model, startedAt);
                 writeFrame(writer, ChatCompletionChunk.stop(id, model));
                 writer.write("data: [DONE]\n\n");
                 writer.flush();
             }
         };
+    }
+
+    /**
+     * Runs the pipeline and writes each speech unit as it becomes available.
+     *
+     * <p>Buffers Gemini's raw fragments until a sentence ends: Gemini emits arbitrary token-sized
+     * pieces, and handing half a sentence to a TTS engine produces audibly wrong prosody.
+     */
+    private void streamAnswer(ChatCompletionRequest request, OutputStreamWriter writer,
+                              String id, String model, long startedAt) throws IOException {
+        UUID tenantId = resolveTenantId(request);
+        Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
+        if (tenant == null) {
+            log.error("Resolved tenantId {} does not exist in the tenants table - proceeding without tenant context",
+                    tenantId);
+        }
+
+        String userText = extractLastUserMessage(request.messages());
+        String language = detectLanguage(userText);
+        List<String> ragContext = ragSearch(userText, language, tenantId);
+        long ragDoneAt = System.currentTimeMillis();
+        String prompt = buildPrompt(language, ragContext, request.messages(), tenant);
+
+        StringBuilder pending = new StringBuilder();
+        StringBuilder spoken = new StringBuilder();
+        // Boxed so the lambda can report when the caller could first have heard something.
+        long[] firstChunkAt = {0L};
+        boolean[] first = {true};
+
+        LlmResult result;
+        try {
+            result = llmClient.completeStreaming(prompt, userText, fragment -> {
+                if (firstChunkAt[0] == 0L) {
+                    firstChunkAt[0] = System.currentTimeMillis();
+                }
+                pending.append(fragment);
+                for (String sentence : drainSentences(pending)) {
+                    spoken.append(sentence);
+                    writeFrameUnchecked(writer, ChatCompletionChunk.content(id, model, sentence, first[0]));
+                    first[0] = false;
+                }
+            });
+        } catch (Exception e) {
+            // Nothing written yet -> a spoken apology still beats silence. Mid-stream we cannot
+            // retract what Vapi is already speaking, so we just stop cleanly.
+            log.error("Streaming generation failed for tenant {} after {} ms", tenantId,
+                    System.currentTimeMillis() - startedAt, e);
+            if (first[0]) {
+                writeFrame(writer, ChatCompletionChunk.content(id, model, FALLBACK_ANSWER, true));
+            }
+            return;
+        }
+
+        // Whatever did not end in punctuation still has to be said.
+        if (!pending.isEmpty()) {
+            spoken.append(pending);
+            writeFrame(writer, ChatCompletionChunk.content(id, model, pending.toString(), first[0]));
+        }
+
+        long now = System.currentTimeMillis();
+        log.info("Voice turn for tenant {}: rag {} ms, first word {} ms, total {} ms, {} chars, {} tokens",
+                tenantId, ragDoneAt - startedAt,
+                firstChunkAt[0] > 0 ? firstChunkAt[0] - startedAt : -1,
+                now - startedAt, spoken.length(), result.totalTokens());
+
+        usageRecorder.record(tenantId, tenant != null, UsageRecorder.extractVapiCallId(request.call()),
+                result.promptTokens(), result.completionTokens(), spoken.length());
+    }
+
+    /**
+     * Removes and returns every complete sentence sitting in the buffer, leaving any trailing
+     * partial sentence behind for the next fragment to finish.
+     */
+    private List<String> drainSentences(StringBuilder buffer) {
+        List<String> out = new ArrayList<>();
+        Matcher m = SENTENCE.matcher(buffer);
+        int consumed = 0;
+        while (m.find()) {
+            out.add(buffer.substring(consumed, m.end()));
+            consumed = m.end();
+        }
+        if (consumed > 0) {
+            buffer.delete(0, consumed);
+        }
+        return out;
+    }
+
+    /** {@link #writeFrame} for use inside a lambda that cannot declare {@code IOException}. */
+    private void writeFrameUnchecked(OutputStreamWriter writer, ChatCompletionChunk chunk) {
+        try {
+            writeFrame(writer, chunk);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private void writeFrame(OutputStreamWriter writer, ChatCompletionChunk chunk) throws IOException {

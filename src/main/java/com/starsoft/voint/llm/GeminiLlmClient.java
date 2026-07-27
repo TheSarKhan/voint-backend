@@ -1,5 +1,7 @@
 package com.starsoft.voint.llm;
 
+import java.util.function.Consumer;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -33,5 +35,17 @@ public class GeminiLlmClient implements LlmClient {
             log.error("Gemini LLM call failed - returning safe fallback response instead of failing the call", e);
             return new LlmResult(FALLBACK_MESSAGE, 0, 0);
         }
+    }
+
+    /**
+     * Deliberately lets failures propagate: the caller is streaming to a live phone line and is
+     * the only one that knows whether any audio has already been committed, so it - not this
+     * class - decides whether a fallback sentence can still be spoken.
+     */
+    @Override
+    public LlmResult completeStreaming(String systemPrompt, String userMessage, Consumer<String> onFragment) {
+        GeminiApiClient.GenerationResult result =
+                geminiApiClient.generateContentStream(systemPrompt, userMessage, onFragment);
+        return new LlmResult(result.text(), result.promptTokens(), result.completionTokens());
     }
 }

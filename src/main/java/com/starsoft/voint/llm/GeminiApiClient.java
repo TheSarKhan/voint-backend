@@ -1,17 +1,25 @@
 package com.starsoft.voint.llm;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +49,7 @@ public class GeminiApiClient {
     private final String pinnedChatModel;
     private final String pinnedEmbeddingModel;
     private final RestClient restClient;
+    private final ObjectMapper objectMapper;
 
     private volatile boolean modelsDiscovered = false;
     private volatile String chatModel;
@@ -48,11 +57,24 @@ public class GeminiApiClient {
 
     public GeminiApiClient(@Value("${voint.gemini.api-key:}") String apiKey,
                             @Value("${voint.gemini.model:}") String pinnedChatModel,
-                            @Value("${voint.gemini.embedding-model:}") String pinnedEmbeddingModel) {
+                            @Value("${voint.gemini.embedding-model:}") String pinnedEmbeddingModel,
+                            @Value("${voint.gemini.connect-timeout-seconds:5}") int connectTimeoutSeconds,
+                            @Value("${voint.gemini.read-timeout-seconds:20}") int readTimeoutSeconds,
+                            ObjectMapper objectMapper) {
         this.apiKey = apiKey;
         this.pinnedChatModel = pinnedChatModel;
         this.pinnedEmbeddingModel = pinnedEmbeddingModel;
-        this.restClient = RestClient.builder().baseUrl(BASE_URL).build();
+        this.objectMapper = objectMapper;
+
+        // Timeouts are not optional here. Without them a stalled Gemini connection blocks the
+        // request thread forever: the caller on a live phone call gets no answer, no error and
+        // no log line - just silence until the person hangs up. Read timeout applies per read,
+        // so a long streamed generation is fine as long as chunks keep arriving.
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds));
+        factory.setReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+
+        this.restClient = RestClient.builder().baseUrl(BASE_URL).requestFactory(factory).build();
     }
 
     public boolean isConfigured() {
@@ -113,6 +135,108 @@ public class GeminiApiClient {
             return new GenerationResult(text, promptTokens, completionTokens);
         } catch (RestClientException e) {
             throw new GeminiApiException("Gemini generateContent call failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Streaming counterpart of {@link #generateContent}: calls {@code streamGenerateContent} and
+     * hands each text fragment to {@code onChunk} the moment it arrives, returning the assembled
+     * result once the stream ends.
+     *
+     * <p>This exists for one reason: on a phone call, latency to the <em>first</em> word is what
+     * the caller experiences. Waiting for the whole answer before speaking any of it adds seconds
+     * of dead air, which Vapi reports as a "hang" and callers hear as a broken line.
+     *
+     * <p>Throws {@link GeminiApiException} on failure, like its non-streaming sibling. Note that
+     * once {@code onChunk} has emitted anything the caller has already committed bytes to the
+     * wire, so a mid-stream failure cannot be papered over with a fallback answer.
+     */
+    public GenerationResult generateContentStream(String systemPrompt, String userMessage,
+                                                  Consumer<String> onChunk) {
+        if (!isConfigured()) {
+            throw new GeminiApiException("Gemini API key is not configured");
+        }
+        ensureModelsDiscovered();
+        if (chatModel == null) {
+            throw new GeminiApiException("No suitable Gemini 'flash' generateContent model was discovered");
+        }
+
+        GenerateContentRequest body = new GenerateContentRequest(
+                List.of(new Content("user", List.of(new Part(userMessage)))),
+                StringUtils.hasText(systemPrompt) ? new SystemInstruction(List.of(new Part(systemPrompt))) : null);
+
+        StringBuilder full = new StringBuilder();
+        int[] tokens = new int[2];
+
+        try {
+            restClient.post()
+                    .uri(b -> b.path("/v1beta/" + chatModel + ":streamGenerateContent")
+                            .queryParam("alt", "sse")
+                            .queryParam("key", apiKey)
+                            .build())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .exchange((request, response) -> {
+                        if (response.getStatusCode().isError()) {
+                            throw new GeminiApiException("Gemini streamGenerateContent returned HTTP "
+                                    + response.getStatusCode());
+                        }
+                        try (BufferedReader reader = new BufferedReader(
+                                new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (!line.startsWith("data:")) {
+                                    continue;
+                                }
+                                String payload = line.substring(5).trim();
+                                if (payload.isEmpty() || "[DONE]".equals(payload)) {
+                                    continue;
+                                }
+                                String text = readChunk(payload, tokens);
+                                if (!text.isEmpty()) {
+                                    full.append(text);
+                                    onChunk.accept(text);
+                                }
+                            }
+                        }
+                        return null;
+                    });
+        } catch (GeminiApiException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new GeminiApiException("Gemini streamGenerateContent call failed: " + e.getMessage(), e);
+        }
+
+        if (full.isEmpty()) {
+            throw new GeminiApiException("Gemini streamGenerateContent produced no text "
+                    + "(possibly blocked by safety filters)");
+        }
+        return new GenerationResult(full.toString(), tokens[0], tokens[1]);
+    }
+
+    /**
+     * Pulls the text out of one SSE frame and keeps the running token counts up to date. Usage
+     * metadata is repeated on every frame with cumulative totals, so the last one seen wins.
+     * A malformed frame is skipped rather than killing a call that is already mid-sentence.
+     */
+    private String readChunk(String payload, int[] tokens) {
+        try {
+            JsonNode root = objectMapper.readTree(payload);
+            JsonNode usage = root.path("usageMetadata");
+            if (usage.hasNonNull("promptTokenCount")) {
+                tokens[0] = usage.path("promptTokenCount").asInt();
+            }
+            if (usage.hasNonNull("candidatesTokenCount")) {
+                tokens[1] = usage.path("candidatesTokenCount").asInt();
+            }
+            StringBuilder sb = new StringBuilder();
+            for (JsonNode part : root.path("candidates").path(0).path("content").path("parts")) {
+                sb.append(part.path("text").asText(""));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("Skipping unparseable Gemini stream frame: {}", e.getMessage());
+            return "";
         }
     }
 

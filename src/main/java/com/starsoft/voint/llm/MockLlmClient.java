@@ -1,5 +1,7 @@
 package com.starsoft.voint.llm;
 
+import java.util.function.Consumer;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -16,5 +18,12 @@ public class MockLlmClient implements LlmClient {
         log.debug("MockLlmClient.complete - systemPrompt length={}, userMessage='{}'",
                 systemPrompt != null ? systemPrompt.length() : 0, userMessage);
         return new LlmResult("mock cavab: " + userMessage, 0, 0);
+    }
+
+    @Override
+    public LlmResult completeStreaming(String systemPrompt, String userMessage, Consumer<String> onFragment) {
+        LlmResult result = complete(systemPrompt, userMessage);
+        onFragment.accept(result.content());
+        return result;
     }
 }
