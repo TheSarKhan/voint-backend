@@ -91,9 +91,12 @@ voint:
     # Month boundaries are local to the business: "July" must mean July in Baku, not UTC.
     zone: ${VOINT_BILLING_ZONE:Asia/Baku}
   cors:
-    # Comma-separated origins allowed to call the API from a browser (voint-panel's dev server
-    # on 5173, voint-admin's on 5180, by default). Add deployed panel URLs here once they exist.
-    allowed-origins: ${VOINT_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5180}
+    # Comma-separated origins allowed to call the API from a browser: voint-panel's dev server on
+    # 5173, voint-admin's on 5180, voint-landing's (Next.js) on 3000.
+    # PRODUCTION: the deployed origins must be added via VOINT_CORS_ALLOWED_ORIGINS on the server,
+    # including https://landing-voint.sarkhan.az - without it the landing's pilot form is blocked
+    # by the browser before the request ever reaches this backend.
+    allowed-origins: ${VOINT_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5180,http://localhost:3000}
 
 logging:
   level:
