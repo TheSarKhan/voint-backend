@@ -14,7 +14,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.data.domain.Pageable;
+import org.springframework.web.bind.annotation.RequestParam;
+
 import com.starsoft.voint.auth.TenantAccessGuard;
+import com.starsoft.voint.common.dto.PageRequests;
+import com.starsoft.voint.common.dto.PageResponse;
 import com.starsoft.voint.tenant.dto.TenantConfigUpdateRequest;
 import com.starsoft.voint.tenant.dto.TenantCreateRequest;
 import com.starsoft.voint.tenant.dto.TenantResponse;
@@ -41,10 +46,17 @@ public class TenantController {
     }
 
     @GetMapping
-    @Operation(summary = "List all tenants (SUPER_ADMIN only)")
-    public List<TenantResponse> list() {
+    @Operation(summary = "Search tenants, paginated and sorted (SUPER_ADMIN only)")
+    public PageResponse<TenantResponse> list(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String direction) {
         tenantAccessGuard.requireSuperAdmin();
-        return tenantService.list().stream().map(TenantResponse::from).toList();
+        Pageable pageable = PageRequests.of(page, size, sort, direction,
+                TenantService.SORTABLE, TenantService.DEFAULT_SORT);
+        return PageResponse.of(tenantService.search(q, pageable), TenantResponse::from);
     }
 
     @GetMapping("/{id}")

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.starsoft.voint.auth.TenantAccessGuard;
+import com.starsoft.voint.common.dto.PageResponse;
 import com.starsoft.voint.tenant.dto.TenantResponse;
 import com.starsoft.voint.usage.dto.BillingPlanUpdateRequest;
 import com.starsoft.voint.usage.dto.UsageReport;
@@ -29,10 +30,15 @@ public class UsageController {
     private final TenantAccessGuard tenantAccessGuard;
 
     @GetMapping("/api/v1/admin/usage")
-    @Operation(summary = "Usage and billing for every tenant in a month (SUPER_ADMIN only)")
-    public List<UsageReport> allTenants(@RequestParam(required = false) String month) {
+    @Operation(summary = "Usage and billing per tenant, paginated and sorted (SUPER_ADMIN only)")
+    public PageResponse<UsageReport> allTenants(
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String direction) {
         tenantAccessGuard.requireSuperAdmin();
-        return usageService.reportForAll(month);
+        return usageService.pagedReport(month, sort, direction, page, size);
     }
 
     @GetMapping("/api/v1/tenants/{tenantId}/usage")

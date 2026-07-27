@@ -1,7 +1,11 @@
 package com.starsoft.voint.tenant;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +47,18 @@ public class TenantService {
     @Transactional(readOnly = true)
     public List<Tenant> list() {
         return tenantRepository.findAll();
+    }
+
+    /** Columns the admin table may sort by. Anything else falls back to {@link #DEFAULT_SORT}. */
+    public static final Set<String> SORTABLE =
+            Set.of("name", "subdomain", "phoneNumber", "monthlyFee", "createdAt");
+
+    public static final String DEFAULT_SORT = "name";
+
+    @Transactional(readOnly = true)
+    public Page<Tenant> search(String query, Pageable pageable) {
+        String q = query == null ? "" : query.trim().toLowerCase();
+        return tenantRepository.search(q, pageable);
     }
 
     @Transactional(readOnly = true)

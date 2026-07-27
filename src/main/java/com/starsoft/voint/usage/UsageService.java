@@ -8,6 +8,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -16,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.starsoft.voint.call.CallRepository;
+import com.starsoft.voint.common.dto.PageRequests;
+import com.starsoft.voint.common.dto.PageResponse;
 import com.starsoft.voint.common.exception.NotFoundException;
 import com.starsoft.voint.tenant.Tenant;
 import com.starsoft.voint.tenant.TenantRepository;
@@ -95,6 +98,57 @@ public class UsageService {
                 // Biggest bills first - that is the order the operator wants to review them in.
                 .sorted(Comparator.comparing(UsageReport::invoiceAzn).reversed())
                 .toList();
+    }
+
+    /** Columns the billing table may sort by; all of them are computed, none exist in SQL. */
+    public static final Set<String> SORTABLE = Set.of(
+            "tenantName", "calls", "minutes", "ttsCharacters", "totalTokens",
+            "cost", "invoice", "margin");
+
+    public static final String DEFAULT_SORT = "invoice";
+
+    /**
+     * Sorted and paginated in memory, deliberately.
+     *
+     * <p>Every sortable column here - cost, invoice, margin - is derived from provider rates and a
+     * billing plan, not stored anywhere, so none of it can be ordered by SQL without duplicating
+     * the pricing rules into the query and letting the two drift apart. The set being ordered is
+     * the tenant list, which is tens of rows; when that stops being true the fix is a materialised
+     * monthly summary table, not a cleverer query.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<UsageReport> pagedReport(String month, String sort, String direction,
+                                                 Integer page, Integer size) {
+        List<UsageReport> all = reportForAll(month);
+
+        String sortKey = PageRequests.resolveSort(sort, SORTABLE, DEFAULT_SORT);
+        String dir = PageRequests.resolveDirection(direction);
+        Comparator<UsageReport> comparator = comparatorFor(sortKey);
+        if ("desc".equals(dir)) {
+            comparator = comparator.reversed();
+        }
+
+        int pageNumber = PageRequests.resolvePage(page);
+        int pageSize = PageRequests.resolveSize(size);
+        List<UsageReport> sorted = all.stream().sorted(comparator).toList();
+
+        int from = Math.min(pageNumber * pageSize, sorted.size());
+        int to = Math.min(from + pageSize, sorted.size());
+
+        return PageResponse.of(sorted.subList(from, to), pageNumber, pageSize, sorted.size(), sortKey, dir);
+    }
+
+    private Comparator<UsageReport> comparatorFor(String key) {
+        return switch (key) {
+            case "tenantName" -> Comparator.comparing(UsageReport::tenantName, String.CASE_INSENSITIVE_ORDER);
+            case "calls" -> Comparator.comparingLong(r -> r.usage().calls());
+            case "minutes" -> Comparator.comparing(r -> r.usage().minutes());
+            case "ttsCharacters" -> Comparator.comparingLong(r -> r.usage().ttsCharacters());
+            case "totalTokens" -> Comparator.comparingLong(r -> r.usage().totalTokens());
+            case "cost" -> Comparator.comparing(r -> r.cost().total());
+            case "margin" -> Comparator.comparing(UsageReport::marginAzn);
+            default -> Comparator.comparing(UsageReport::invoiceAzn);
+        };
     }
 
     @Transactional
