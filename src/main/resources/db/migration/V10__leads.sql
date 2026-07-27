@@ -1,3 +1,5 @@
+-- (V9 idi, V10-a kocuruldu: V9 nomresi artiq 'ces subdomain texnika' terefinden tutulmusdu
+--  ve bazaya tetbiq olunmusdu. Iki eyni versiya Flyway-i sindirir, backend qalxmir.)
 -- Pilot requests submitted from the public landing page (voint-landing).
 --
 -- Deliberately NOT a tenant-scoped table: a lead is precisely someone who is not a customer yet.
