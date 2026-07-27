@@ -24,7 +24,17 @@ public enum SettingKey {
             "Cavabları yazan model və RAG axtarışı üçün embedding."),
 
     VAPI_PRIVATE_KEY("vapi.private-key", "Vapi private açarı", true,
-            "Vapi konfiqurasiyasını bu paneldən yeniləmək üçün lazımdır.");
+            "Vapi konfiqurasiyasını bu paneldən yeniləmək üçün lazımdır."),
+
+    /**
+     * Base domain the tenant panels live under: "sarkhan.az" serves ces.sarkhan.az.
+     *
+     * <p>A setting rather than a constant because it WILL change - the platform is running on a
+     * borrowed domain until voint.az is registered, and moving should be one field in this panel,
+     * not a redeploy plus a hunt for hardcoded suffixes across two frontends.
+     */
+    PANEL_DOMAIN("panel.domain", "Panel domeni", false,
+            "Müəssisə panellərinin ünvanı: ces.<domen>. Domen dəyişəndə yalnız buranı dəyiş.");
 
     private final String key;
     private final String label;

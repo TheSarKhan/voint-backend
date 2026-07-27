@@ -40,6 +40,10 @@ import lombok.extern.slf4j.Slf4j;
 @Tag(name = "Platform settings", description = "Provider credentials, managed from the admin panel")
 public class SettingsController {
 
+    /** A bare domain: labels joined by dots, no scheme, no path, no leading or trailing dot. */
+    private static final java.util.regex.Pattern DOMAIN = java.util.regex.Pattern.compile(
+            "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$");
+
     private final PlatformSettingsService settings;
     private final ProviderProbe probe;
     private final VapiSyncService vapiSync;
@@ -148,6 +152,12 @@ public class SettingsController {
                     probe.elevenLabs(settings.get(SettingKey.ELEVENLABS_API_KEY), value);
             case GEMINI_API_KEY -> probe.gemini(value);
             case VAPI_PRIVATE_KEY -> probe.vapi(value);
+            // Nothing to probe - a domain is not a credential. Only reject shapes that would
+            // silently produce broken addresses, like a pasted URL or a leading dot.
+            case PANEL_DOMAIN -> DOMAIN.matcher(value).matches()
+                    ? new ProviderProbe.Result(true, "Domen qəbul edildi")
+                    : new ProviderProbe.Result(false,
+                            "Yalnız domen yazın - protokol və əyri xətt olmadan. Məsələn: voint.az");
         };
         if (!result.ok()) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, result.detail());

@@ -49,6 +49,9 @@ public class PlatformSettingsService {
     @Value("${voint.vapi.private-key:}")
     private String configuredVapiPrivateKey;
 
+    @Value("${voint.panel.domain:sarkhan.az}")
+    private String configuredPanelDomain;
+
     /** The effective value: database first, then server configuration, else empty string. */
     public String get(SettingKey key) {
         String stored = fromDatabase(key);
@@ -127,6 +130,7 @@ public class PlatformSettingsService {
             case ELEVENLABS_VOICE_ID -> nullSafe(configuredElevenLabsVoiceId);
             case GEMINI_API_KEY -> nullSafe(configuredGeminiKey);
             case VAPI_PRIVATE_KEY -> nullSafe(configuredVapiPrivateKey);
+            case PANEL_DOMAIN -> nullSafe(configuredPanelDomain);
         };
     }
 

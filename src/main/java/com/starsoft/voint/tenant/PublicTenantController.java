@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.starsoft.voint.settings.PlatformSettingsService;
+import com.starsoft.voint.settings.SettingKey;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,22 @@ import lombok.RequiredArgsConstructor;
 public class PublicTenantController {
 
     private final TenantRepository tenantRepository;
+    private final PlatformSettingsService settings;
+
+    /** Platform-wide values a panel needs before anyone has logged in. */
+    public record PublicConfig(String panelDomain) {
+    }
+
+    /**
+     * Lets both frontends read the panel domain instead of hardcoding it. Without this, moving
+     * from sarkhan.az to voint.az would mean editing suffix strings in two apps and redeploying;
+     * with it, the move is one field in the admin panel.
+     */
+    @GetMapping("/api/v1/public/config")
+    @Operation(summary = "Platform values needed before login")
+    public PublicConfig config() {
+        return new PublicConfig(settings.get(SettingKey.PANEL_DOMAIN));
+    }
 
     /** What a panel is allowed to know about its tenant before login. */
     public record PublicTenant(UUID id, String name, String subdomain) {
