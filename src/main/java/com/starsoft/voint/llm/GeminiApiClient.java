@@ -20,6 +20,8 @@ import org.springframework.web.client.RestClientException;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.starsoft.voint.settings.PlatformSettingsService;
+import com.starsoft.voint.settings.SettingKey;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -45,7 +47,16 @@ public class GeminiApiClient {
     private static final String BASE_URL = "https://generativelanguage.googleapis.com";
     private static final int EMBEDDING_OUTPUT_DIMENSIONS = 768;
 
-    private final String apiKey;
+    /**
+     * Resolved per call rather than captured at startup: the key can now be rotated from the
+     * admin panel, and a rotation has to take effect on the next call rather than the next
+     * restart - a restart in the middle of business hours drops whoever is on the line.
+     */
+    private String apiKey() {
+        return settings.get(SettingKey.GEMINI_API_KEY);
+    }
+
+    private final PlatformSettingsService settings;
     private final String pinnedChatModel;
     private final String pinnedEmbeddingModel;
     private final RestClient restClient;
@@ -55,13 +66,13 @@ public class GeminiApiClient {
     private volatile String chatModel;
     private volatile String embeddingModel;
 
-    public GeminiApiClient(@Value("${voint.gemini.api-key:}") String apiKey,
+    public GeminiApiClient(PlatformSettingsService settings,
                             @Value("${voint.gemini.model:}") String pinnedChatModel,
                             @Value("${voint.gemini.embedding-model:}") String pinnedEmbeddingModel,
                             @Value("${voint.gemini.connect-timeout-seconds:5}") int connectTimeoutSeconds,
                             @Value("${voint.gemini.read-timeout-seconds:20}") int readTimeoutSeconds,
                             ObjectMapper objectMapper) {
-        this.apiKey = apiKey;
+        this.settings = settings;
         this.pinnedChatModel = pinnedChatModel;
         this.pinnedEmbeddingModel = pinnedEmbeddingModel;
         this.objectMapper = objectMapper;
@@ -78,16 +89,24 @@ public class GeminiApiClient {
     }
 
     public boolean isConfigured() {
-        return StringUtils.hasText(apiKey);
+        return StringUtils.hasText(apiKey());
     }
 
     @PostConstruct
     void init() {
-        if (!isConfigured()) {
-            log.info("GEMINI_API_KEY not set - Gemini model discovery skipped (LlmClient will fall back to MockLlmClient)");
-            return;
+        // Warm-up only. Discovery is lazy anyway (see ensureModelsDiscovered), so nothing here is
+        // allowed to stop the application booting - including the settings lookup, which now
+        // touches the database and could fail before it is fully ready.
+        try {
+            if (!isConfigured()) {
+                log.info("No Gemini API key configured - model discovery skipped until one is set "
+                        + "(admin panel or GEMINI_API_KEY)");
+                return;
+            }
+            ensureModelsDiscovered();
+        } catch (Exception e) {
+            log.warn("Gemini model discovery failed at startup - will retry on first use: {}", e.getMessage());
         }
-        ensureModelsDiscovered();
     }
 
     /**
@@ -108,7 +127,7 @@ public class GeminiApiClient {
                     StringUtils.hasText(systemPrompt) ? new SystemInstruction(List.of(new Part(systemPrompt))) : null);
 
             GenerateContentResponse resp = restClient.post()
-                    .uri(b -> b.path("/v1beta/" + chatModel + ":generateContent").queryParam("key", apiKey).build())
+                    .uri(b -> b.path("/v1beta/" + chatModel + ":generateContent").queryParam("key", apiKey()).build())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
@@ -172,7 +191,7 @@ public class GeminiApiClient {
             restClient.post()
                     .uri(b -> b.path("/v1beta/" + chatModel + ":streamGenerateContent")
                             .queryParam("alt", "sse")
-                            .queryParam("key", apiKey)
+                            .queryParam("key", apiKey())
                             .build())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
@@ -261,7 +280,7 @@ public class GeminiApiClient {
                     new EmbedContentInner(List.of(new Part(text))), EMBEDDING_OUTPUT_DIMENSIONS);
 
             EmbedContentResponse resp = restClient.post()
-                    .uri(b -> b.path("/v1beta/" + embeddingModel + ":embedContent").queryParam("key", apiKey).build())
+                    .uri(b -> b.path("/v1beta/" + embeddingModel + ":embedContent").queryParam("key", apiKey()).build())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
@@ -297,7 +316,7 @@ public class GeminiApiClient {
 
             if (chatModel == null || embeddingModel == null) {
                 ListModelsResponse resp = restClient.get()
-                        .uri(b -> b.path("/v1beta/models").queryParam("key", apiKey).build())
+                        .uri(b -> b.path("/v1beta/models").queryParam("key", apiKey()).build())
                         .retrieve()
                         .body(ListModelsResponse.class);
 

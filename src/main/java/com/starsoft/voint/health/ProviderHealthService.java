@@ -1,19 +1,17 @@
 package com.starsoft.voint.health;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
 
-import com.starsoft.voint.llm.GeminiApiClient;
+import com.starsoft.voint.settings.PlatformSettingsService;
+import com.starsoft.voint.settings.SettingKey;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -21,119 +19,80 @@ import lombok.extern.slf4j.Slf4j;
  *
  * <p>Written after an ElevenLabs key was revoked without warning: the first sign of trouble was a
  * caller hearing silence, because nothing in the system ever checked whether the key still worked.
- * A dead credential is now visible in the admin panel and shouted into the logs within minutes,
- * instead of being discovered by a customer.
  *
- * <p>Note the asymmetry: the ElevenLabs key is used by Vapi, not by this backend, so nothing here
- * would ever have exercised it organically. That is exactly why it needs an explicit check.
+ * <p>Note the asymmetry that made it invisible - the ElevenLabs key is used by Vapi, not by this
+ * backend, so no amount of normal traffic here would ever have exercised it. That is exactly why
+ * it needs an explicit check.
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class ProviderHealthService {
 
     private static final String ELEVENLABS = "ElevenLabs";
     private static final String GEMINI = "Gemini";
+    private static final String VAPI = "Vapi";
 
-    private final RestClient restClient;
-    private final GeminiApiClient geminiApiClient;
-    private final String elevenLabsApiKey;
-    private final String elevenLabsVoiceId;
+    private final ProviderProbe probe;
+    private final PlatformSettingsService settings;
 
     private final Map<String, ProviderHealth> state = new ConcurrentHashMap<>();
 
-    public ProviderHealthService(GeminiApiClient geminiApiClient,
-                                 @Value("${voint.elevenlabs.api-key:}") String elevenLabsApiKey,
-                                 @Value("${voint.elevenlabs.voice-id:}") String elevenLabsVoiceId) {
-        this.geminiApiClient = geminiApiClient;
-        this.elevenLabsApiKey = elevenLabsApiKey;
-        this.elevenLabsVoiceId = elevenLabsVoiceId;
-
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(5));
-        factory.setReadTimeout(Duration.ofSeconds(10));
-        this.restClient = RestClient.builder().requestFactory(factory).build();
-    }
-
     /** Current snapshot, in the order an operator wants to scan it. */
     public List<ProviderHealth> current() {
-        return List.of(
-                state.getOrDefault(ELEVENLABS,
-                        ProviderHealth.notConfigured(ELEVENLABS, "Hələ yoxlanılmayıb")),
-                state.getOrDefault(GEMINI,
-                        ProviderHealth.notConfigured(GEMINI, "Hələ yoxlanılmayıb")));
+        return List.of(snapshot(ELEVENLABS), snapshot(GEMINI), snapshot(VAPI));
+    }
+
+    private ProviderHealth snapshot(String name) {
+        return state.getOrDefault(name, ProviderHealth.notConfigured(name, "Hələ yoxlanılmayıb"));
     }
 
     /**
-     * Runs shortly after startup and then every five minutes. Five minutes is the target for
-     * "how long can a broken credential stay unnoticed" - short enough to catch it before most
-     * business hours traffic, long enough to be a negligible number of API calls.
+     * Runs shortly after startup and then every five minutes - short enough to catch a broken
+     * credential before most business-hours traffic, few enough calls to be free.
      */
     @Scheduled(initialDelay = 30_000, fixedDelay = 300_000)
     public void check() {
-        record(checkElevenLabs());
-        record(checkGemini());
+        String elevenKey = settings.get(SettingKey.ELEVENLABS_API_KEY);
+        String voiceId = settings.get(SettingKey.ELEVENLABS_VOICE_ID);
+        record(ELEVENLABS, elevenKey, () -> probe.elevenLabs(elevenKey, voiceId),
+                "VOINT_ELEVENLABS_API_KEY və ya Ayarlar səhifəsi");
+
+        String geminiKey = settings.get(SettingKey.GEMINI_API_KEY);
+        record(GEMINI, geminiKey, () -> probe.gemini(geminiKey), "GEMINI_API_KEY");
+
+        String vapiKey = settings.get(SettingKey.VAPI_PRIVATE_KEY);
+        record(VAPI, vapiKey, () -> probe.vapi(vapiKey), "VAPI_PRIVATE_KEY");
     }
 
-    /** Logs only on transitions, so a healthy system stays quiet and a break is loud. */
-    private void record(ProviderHealth health) {
-        ProviderHealth previous = state.put(health.name(), health);
-        boolean changed = previous == null || previous.status() != health.status();
-        if (!changed) {
+    private void record(String name, String credential, java.util.function.Supplier<ProviderProbe.Result> check,
+                        String whereToSet) {
+        ProviderHealth health;
+        if (!StringUtils.hasText(credential)) {
+            health = ProviderHealth.notConfigured(name, "Açar təyin olunmayıb (" + whereToSet + ")");
+        } else {
+            ProviderProbe.Result result = check.get();
+            health = result.ok()
+                    ? ProviderHealth.ok(name, result.detail())
+                    : ProviderHealth.down(name, result.detail());
+        }
+
+        ProviderHealth previous = state.put(name, health);
+        // Log transitions only: a healthy system stays quiet, a break is loud.
+        if (previous != null && previous.status() == health.status()) {
             return;
         }
         if (health.status() == ProviderHealth.Status.DOWN) {
             log.error("PROVIDER DOWN - {}: {}. Calls depending on it will fail until this is fixed.",
-                    health.name(), health.detail());
+                    name, health.detail());
         } else {
-            log.info("Provider {} is now {}: {}", health.name(), health.status(), health.detail());
+            log.info("Provider {} is now {}: {}", name, health.status(), health.detail());
         }
     }
 
-    private ProviderHealth checkElevenLabs() {
-        if (!StringUtils.hasText(elevenLabsApiKey)) {
-            return ProviderHealth.notConfigured(ELEVENLABS,
-                    "Açar konfiqurasiya olunmayıb (VOINT_ELEVENLABS_API_KEY)");
-        }
-        try {
-            restClient.get()
-                    .uri("https://api.elevenlabs.io/v1/user")
-                    .header("xi-api-key", elevenLabsApiKey)
-                    .retrieve()
-                    .toBodilessEntity();
-        } catch (Exception e) {
-            return ProviderHealth.down(ELEVENLABS,
-                    "Açar qəbul edilmir - yeni açar yaradıb Vapi-də yeniləmək lazımdır (" + e.getMessage() + ")");
-        }
-
-        // The key can be valid while the specific voice we speak with is gone; both break a call.
-        if (StringUtils.hasText(elevenLabsVoiceId)) {
-            try {
-                restClient.get()
-                        .uri("https://api.elevenlabs.io/v1/voices/" + elevenLabsVoiceId)
-                        .header("xi-api-key", elevenLabsApiKey)
-                        .retrieve()
-                        .toBodilessEntity();
-            } catch (Exception e) {
-                return ProviderHealth.down(ELEVENLABS,
-                        "Açar işləyir, amma səs " + elevenLabsVoiceId + " tapılmadı (" + e.getMessage() + ")");
-            }
-        }
-        return ProviderHealth.ok(ELEVENLABS, "Açar və səs qüvvədədir");
-    }
-
-    private ProviderHealth checkGemini() {
-        if (!geminiApiClient.isConfigured()) {
-            return ProviderHealth.notConfigured(GEMINI, "Açar konfiqurasiya olunmayıb (GEMINI_API_KEY)");
-        }
-        try {
-            // Cheapest call that still proves the key works end to end.
-            float[] embedding = geminiApiClient.embedContent("saglamliq yoxlamasi");
-            if (embedding == null) {
-                return ProviderHealth.down(GEMINI, "Embedding cavabı boş qayıtdı - açar və ya kvota problemi");
-            }
-            return ProviderHealth.ok(GEMINI, "Açar qüvvədədir");
-        } catch (Exception e) {
-            return ProviderHealth.down(GEMINI, "Çağırış uğursuz oldu (" + e.getMessage() + ")");
-        }
+    /** Re-probes immediately, so the panel reflects a just-saved key without waiting five minutes. */
+    public List<ProviderHealth> refresh() {
+        check();
+        return current();
     }
 }

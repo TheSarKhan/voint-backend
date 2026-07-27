@@ -48,7 +48,15 @@ voint:
     secret: ${JWT_SECRET:voint-dev-secret-change-me-0123456789abcdef}
     access-ttl-minutes: 60
     refresh-ttl-days: 7
+  secrets:
+    # AES key protecting provider credentials stored in platform_settings. Falls back to the JWT
+    # secret when unset (with a startup warning) so enabling the feature cannot break a deploy -
+    # but set it, otherwise rotating JWT_SECRET makes every stored credential unreadable.
+    master-key: ${VOINT_SECRETS_KEY:}
   vapi:
+    # Used by the admin panel to push credential changes into Vapi. Without it the panel can still
+    # store a key, but Vapi keeps the old one and calls stay broken.
+    private-key: ${VAPI_PRIVATE_KEY:}
     # Shared secret verified against the incoming "x-vapi-secret" header on every request to
     # /api/v1/voice/webhook (see VapiWebhookAuthFilter). Blank/unset = verification disabled
     # (bootstrap default, logs a startup WARN) - set this to Vapi's "Server URL Secret" before
