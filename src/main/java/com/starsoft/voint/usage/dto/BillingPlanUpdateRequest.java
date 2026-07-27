@@ -10,6 +10,8 @@ import jakarta.validation.constraints.NotNull;
 public record BillingPlanUpdateRequest(
         @NotNull @DecimalMin("0.0") BigDecimal monthlyFee,
         @NotNull @Min(0) Integer includedMinutes,
-        @NotNull @DecimalMin("0.0") BigDecimal overagePerMinute
+        @NotNull @DecimalMin("0.0") BigDecimal overagePerMinute,
+        /** Hard monthly ceiling in minutes; 0 disables it. Optional - omitted leaves it unchanged. */
+        @Min(0) Integer monthlyMinuteCap
 ) {
 }

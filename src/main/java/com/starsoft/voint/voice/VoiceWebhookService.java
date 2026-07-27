@@ -12,6 +12,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,6 +24,7 @@ import com.starsoft.voint.rag.RagDocumentRepository;
 import com.starsoft.voint.rag.VectorUtils;
 import com.starsoft.voint.tenant.Tenant;
 import com.starsoft.voint.tenant.TenantRepository;
+import com.starsoft.voint.usage.TenantQuotaService;
 import com.starsoft.voint.usage.UsageRecorder;
 import com.starsoft.voint.voice.dto.ChatCompletionChunk;
 import com.starsoft.voint.voice.dto.ChatCompletionRequest;
@@ -67,6 +69,7 @@ public class VoiceWebhookService {
     private final TenantRepository tenantRepository;
     private final PromptLoader promptLoader;
     private final UsageRecorder usageRecorder;
+    private final TenantQuotaService tenantQuotaService;
 
     public ChatCompletionResponse handle(ChatCompletionRequest request) {
         return ChatCompletionResponse.assistantMessage(request.model(), generateAnswer(request));
@@ -126,6 +129,20 @@ public class VoiceWebhookService {
                     tenantId);
         }
 
+        // Monthly ceiling, checked only at the start of a call. Mid-call the answer is always
+        // generated: refusing halfway through leaves someone talking to a line that stopped
+        // replying, which is a worse failure than one call running past the limit.
+        String vapiCallId = UsageRecorder.extractVapiCallId(request.call());
+        if (tenant != null && usageRecorder.isFirstTurn(vapiCallId)) {
+            TenantQuotaService.Quota quota = tenantQuotaService.check(tenant);
+            if (quota.blocked()) {
+                log.warn("Tenant {} has reached its monthly cap ({} of {} minutes) - declining the call",
+                        tenantId, quota.minutesUsed(), quota.cap());
+                writeFrame(writer, ChatCompletionChunk.content(id, model, capReachedMessage(tenant), true));
+                return;
+            }
+        }
+
         String userText = extractLastUserMessage(request.messages());
         String language = detectLanguage(userText);
         List<String> ragContext = ragSearch(userText, language, tenantId);
@@ -174,8 +191,21 @@ public class VoiceWebhookService {
                 firstChunkAt[0] > 0 ? firstChunkAt[0] - startedAt : -1,
                 now - startedAt, spoken.length(), result.totalTokens());
 
-        usageRecorder.record(tenantId, tenant != null, UsageRecorder.extractVapiCallId(request.call()),
+        usageRecorder.record(tenantId, tenant != null, vapiCallId,
                 result.promptTokens(), result.completionTokens(), spoken.length());
+    }
+
+    /**
+     * What the caller hears when a business has hit its monthly ceiling. It must not blame them
+     * or mention limits and credits - as far as the caller is concerned nothing is wrong with
+     * them, they just need a person.
+     */
+    private String capReachedMessage(Tenant tenant) {
+        String base = "Üzr istəyirəm, hazırda sizə burada kömək edə bilmirəm. "
+                + "Zəhmət olmasa bir azdan yenidən zəng edin";
+        return StringUtils.hasText(tenant.getHandoffNumber())
+                ? base + ", ya da əməkdaşımızla birbaşa danışın."
+                : base + ".";
     }
 
     /**

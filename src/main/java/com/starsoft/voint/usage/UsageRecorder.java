@@ -26,6 +26,26 @@ import lombok.extern.slf4j.Slf4j;
 public class UsageRecorder {
 
     private final UsageWriter usageWriter;
+    private final UsageEventRepository usageEventRepository;
+
+    /**
+     * True when nothing has been recorded for this Vapi call yet, i.e. the caller has just spoken
+     * for the first time. Unknown call ids count as "first" so a limit is still applied when Vapi
+     * sends no id at all.
+     */
+    public boolean isFirstTurn(String vapiCallId) {
+        if (vapiCallId == null || vapiCallId.isBlank()) {
+            return true;
+        }
+        try {
+            return !usageEventRepository.existsByVapiCallId(vapiCallId);
+        } catch (Exception e) {
+            // A failed lookup must not decide policy; assume mid-call so nobody gets cut off.
+            log.error("Could not determine whether call {} is new - treating it as in-progress",
+                    vapiCallId, e);
+            return false;
+        }
+    }
 
     /**
      * @param tenantExists whether the resolved tenant is actually a row in {@code tenants}. The

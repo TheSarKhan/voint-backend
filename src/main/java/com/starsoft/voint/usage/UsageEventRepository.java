@@ -10,6 +10,13 @@ import org.springframework.data.repository.query.Param;
 
 public interface UsageEventRepository extends JpaRepository<UsageEvent, UUID> {
 
+    /**
+     * Whether this call has already produced a turn. Used to tell the first turn of a call from
+     * the rest, because a monthly limit may only refuse a call at its start - cutting someone off
+     * mid-sentence is worse than letting the last call run over.
+     */
+    boolean existsByVapiCallId(String vapiCallId);
+
     /** AI totals for one tenant over a half-open time window [from, to). */
     @Query("""
             select coalesce(sum(u.promptTokens), 0)     as promptTokens,

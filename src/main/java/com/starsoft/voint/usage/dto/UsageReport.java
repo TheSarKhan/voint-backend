@@ -55,7 +55,14 @@ public record UsageReport(
             int includedMinutes,
             BigDecimal overagePerMinute,
             /** Minutes billed on top of the included allowance. */
-            BigDecimal overageMinutes
+            BigDecimal overageMinutes,
+            /**
+             * Hard monthly ceiling; 0 means none. Unlike the allowance above this is a cost guard -
+             * past it the agent stops answering rather than billing more.
+             */
+            int monthlyMinuteCap,
+            /** Share of the ceiling consumed, or null when there is no ceiling. */
+            BigDecimal capPercentUsed
     ) {
     }
 }

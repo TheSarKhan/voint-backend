@@ -104,6 +104,9 @@ public class UsageService {
         tenant.setMonthlyFee(request.monthlyFee());
         tenant.setIncludedMinutes(request.includedMinutes());
         tenant.setOveragePerMinute(request.overagePerMinute());
+        if (request.monthlyMinuteCap() != null) {
+            tenant.setMonthlyMinuteCap(request.monthlyMinuteCap());
+        }
         return tenantRepository.save(tenant);
     }
 
@@ -156,10 +159,19 @@ public class UsageService {
                         completionTokens, promptTokens + completionTokens, ttsCharacters),
                 new UsageReport.CostBreakdown(tts, llm, vapi, stt, telephony, totalCost),
                 new UsageReport.BillingPlan(tenant.getMonthlyFee(), tenant.getIncludedMinutes(),
-                        tenant.getOveragePerMinute(), overageMinutes),
+                        tenant.getOveragePerMinute(), overageMinutes,
+                        tenant.getMonthlyMinuteCap(), capPercent(minutes, tenant.getMonthlyMinuteCap())),
                 invoice,
                 margin,
                 marginPercent);
+    }
+
+    /** Null when no ceiling is set - there is nothing to be a percentage of. */
+    private BigDecimal capPercent(BigDecimal minutes, int cap) {
+        if (cap <= 0) {
+            return null;
+        }
+        return minutes.multiply(HUNDRED).divide(BigDecimal.valueOf(cap), 1, RoundingMode.HALF_UP);
     }
 
     private BigDecimal azn(BigDecimal usd) {

@@ -68,6 +68,15 @@ public class Tenant {
     @Builder.Default
     private BigDecimal overagePerMinute = BigDecimal.ZERO;
 
+    /**
+     * Hard monthly ceiling in minutes; 0 means none. Distinct from {@link #includedMinutes}:
+     * that one decides what a call costs the customer, this one decides when we stop answering
+     * at all, so a runaway on their side cannot quietly drain a month of credits.
+     */
+    @Column(name = "monthly_minute_cap", nullable = false)
+    @Builder.Default
+    private int monthlyMinuteCap = 0;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();
