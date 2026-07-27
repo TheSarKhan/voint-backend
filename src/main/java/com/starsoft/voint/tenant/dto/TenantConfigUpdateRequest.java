@@ -6,6 +6,9 @@ public record TenantConfigUpdateRequest(
         String greetingText,
         String workingHours,
         String handoffNumber,
-        String languageConfig
+        String languageConfig,
+        String sttDomain,
+        String sttTopic,
+        String sttVocabulary
 ) {
 }

@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.starsoft.voint.provisioning.VapiAssistantProvisioner;
+import com.starsoft.voint.settings.VapiSyncService;
+
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -72,6 +75,17 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(ex.getStatusCode(), ex.getReason());
         pd.setTitle("Request failed");
+        return pd;
+    }
+
+    /** A third party refusing us is not our bug; say which one and what it said. */
+    @ExceptionHandler({VapiAssistantProvisioner.ProvisioningException.class,
+            VapiSyncService.VapiSyncException.class})
+    public ProblemDetail handleUpstream(RuntimeException ex) {
+        log.error("Upstream provider call failed", ex);
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
+        pd.setTitle("Provider unavailable");
+        pd.setType(URI.create("https://voint.starsoft.com/errors/upstream"));
         return pd;
     }
 

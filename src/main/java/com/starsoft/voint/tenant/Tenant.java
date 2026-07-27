@@ -77,6 +77,26 @@ public class Tenant {
     @Builder.Default
     private int monthlyMinuteCap = 0;
 
+    /** Vapi's id for this tenant's assistant; null until it has been provisioned. */
+    @Column(name = "vapi_assistant_id")
+    private String vapiAssistantId;
+
+    /** What this business does, given to the transcriber as context, e.g. "Diş klinikası". */
+    @Column(name = "stt_domain")
+    private String sttDomain;
+
+    /** What callers typically ask about - helps the transcriber pick the right homophone. */
+    @Column(name = "stt_topic")
+    private String sttTopic;
+
+    /**
+     * Comma-separated industry terms the transcriber should expect. Per tenant on purpose: an
+     * equipment vocabulary would actively damage a clinic's recognition. Azerbaijani place names
+     * are added platform-wide and must not be repeated here.
+     */
+    @Column(name = "stt_vocabulary")
+    private String sttVocabulary;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();

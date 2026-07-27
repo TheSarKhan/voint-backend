@@ -1,6 +1,7 @@
 package com.starsoft.voint.tenant;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -51,6 +52,20 @@ public class TenantController {
     public TenantResponse get(@PathVariable UUID id) {
         tenantAccessGuard.requireAccess(id);
         return TenantResponse.from(tenantService.get(id));
+    }
+
+    @PostMapping("/{id}/vapi-sync")
+    @Operation(summary = "Recreate or update this tenant's Vapi assistant (SUPER_ADMIN only)")
+    public TenantResponse syncVapi(@PathVariable UUID id) {
+        tenantAccessGuard.requireSuperAdmin();
+        return TenantResponse.from(tenantService.syncAssistantOrThrow(id));
+    }
+
+    @PostMapping("/vapi-sync-all")
+    @Operation(summary = "Re-push every tenant to Vapi - use after changing a platform-wide voice setting")
+    public Map<String, Integer> syncAllVapi() {
+        tenantAccessGuard.requireSuperAdmin();
+        return Map.of("synced", tenantService.syncAllAssistants());
     }
 
     @PutMapping("/{id}/config")
