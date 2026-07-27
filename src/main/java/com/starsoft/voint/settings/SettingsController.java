@@ -79,21 +79,28 @@ public class SettingsController {
         String value = request.value().trim();
 
         verifyOrReject(settingKey, value);
+
+        // Remember what to go back to: if the change cannot be propagated to Vapi we must not
+        // keep it here either.
+        boolean hadOwnValue = settings.isSetInDatabase(settingKey);
+        String previous = settings.get(settingKey);
+
         settings.set(settingKey, value, currentUserEmail());
 
-        // Vapi holds its own copy of the ElevenLabs settings and does the actual synthesis, so a
-        // save that stops here would leave calls broken while the panel looked healthy.
-        if (request.shouldSync()) {
+        // Vapi holds its own copy of the ElevenLabs settings and does the actual synthesis. If the
+        // push fails we roll back, because the alternative is the worst possible state: the panel
+        // and the monitor both check the NEW key and report healthy, while every call still runs
+        // on the OLD key inside Vapi and fails.
+        if (request.shouldSync() && requiresVapi(settingKey)) {
             try {
-                if (settingKey == SettingKey.ELEVENLABS_API_KEY) {
-                    log.info("ElevenLabs key saved - {}", vapiSync.syncElevenLabsKey());
-                } else if (settingKey == SettingKey.ELEVENLABS_VOICE_ID) {
-                    log.info("ElevenLabs voice saved - {}", vapiSync.syncVoiceId());
-                }
+                String result = settingKey == SettingKey.ELEVENLABS_API_KEY
+                        ? vapiSync.syncElevenLabsKey()
+                        : vapiSync.syncVoiceId();
+                log.info("{} saved - {}", settingKey.getKey(), result);
             } catch (VapiSyncService.VapiSyncException e) {
-                // Saved here but not in Vapi: say so plainly rather than reporting success.
+                rollback(settingKey, hadOwnValue, previous);
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                        "Açar yadda saxlanıldı, amma Vapi-yə ötürülmədi: " + e.getMessage(), e);
+                        "Vapi-yə ötürülmədi, ona görə dəyişiklik geri alındı: " + e.getMessage(), e);
             }
         }
 
@@ -115,6 +122,21 @@ public class SettingsController {
     public List<ProviderHealth> recheck() {
         tenantAccessGuard.requireSuperAdmin();
         return providerHealth.refresh();
+    }
+
+    /** Only the ElevenLabs settings have a second copy inside Vapi that can drift out of sync. */
+    private boolean requiresVapi(SettingKey key) {
+        return key == SettingKey.ELEVENLABS_API_KEY || key == SettingKey.ELEVENLABS_VOICE_ID;
+    }
+
+    private void rollback(SettingKey key, boolean hadOwnValue, String previous) {
+        if (hadOwnValue) {
+            settings.set(key, previous, currentUserEmail());
+        } else {
+            // There was no panel value before - go back to the server configuration.
+            settings.clear(key, currentUserEmail());
+        }
+        log.warn("Rolled back '{}' after a failed Vapi sync", key.getKey());
     }
 
     /** Probes the candidate value; a credential that does not work never reaches the database. */

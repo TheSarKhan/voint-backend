@@ -1,11 +1,12 @@
 package com.starsoft.voint.settings;
 
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -36,9 +37,16 @@ public class VapiSyncService {
 
     private final PlatformSettingsService settings;
 
+    /**
+     * Uses the JDK HttpClient factory rather than SimpleClientHttpRequestFactory: the latter is
+     * built on HttpURLConnection, which rejects PATCH outright ("Invalid HTTP method: PATCH") -
+     * and PATCH is the only verb Vapi offers for updating a credential.
+     */
     private RestClient client() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(Duration.ofSeconds(5));
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(Duration.ofSeconds(15));
         return RestClient.builder().baseUrl(VAPI_BASE).requestFactory(factory).build();
     }

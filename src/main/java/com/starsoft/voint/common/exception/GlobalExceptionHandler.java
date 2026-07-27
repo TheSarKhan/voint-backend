@@ -8,6 +8,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -58,6 +59,19 @@ public class GlobalExceptionHandler {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
         pd.setTitle("Invalid request");
         pd.setType(URI.create("https://voint.starsoft.com/errors/bad-request"));
+        return pd;
+    }
+
+    /**
+     * Without this, the catch-all below swallows every deliberately-chosen status: a controller
+     * that answers 422 "this key does not work, ElevenLabs keys start with sk_" reaches the user
+     * as a bare 500 "Unexpected server error", which is exactly the message they cannot act on.
+     * Advice runs before Spring's own ResponseStatusExceptionResolver, so it has to be handled here.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(ex.getStatusCode(), ex.getReason());
+        pd.setTitle("Request failed");
         return pd;
     }
 
