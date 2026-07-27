@@ -9,6 +9,7 @@ import com.starsoft.voint.tenant.Tenant;
 public record TenantResponse(
         UUID id,
         String name,
+        String subdomain,
         String phoneNumber,
         String greetingText,
         String workingHours,
@@ -25,7 +26,7 @@ public record TenantResponse(
         Instant createdAt
 ) {
     public static TenantResponse from(Tenant t) {
-        return new TenantResponse(t.getId(), t.getName(), t.getPhoneNumber(), t.getGreetingText(),
+        return new TenantResponse(t.getId(), t.getName(), t.getSubdomain(), t.getPhoneNumber(), t.getGreetingText(),
                 t.getWorkingHours(), t.getHandoffNumber(), t.getLanguageConfig(),
                 t.getMonthlyFee(), t.getIncludedMinutes(), t.getOveragePerMinute(),
                 t.getMonthlyMinuteCap(), t.getVapiAssistantId(),

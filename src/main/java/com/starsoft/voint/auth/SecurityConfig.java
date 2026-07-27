@@ -50,6 +50,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/voice/**",
                                 "/api/v1/auth/login",
+                                // Panel bunu login-den EVVEL cagirir: hansi muessiseye aid
+                                // oldugunu bilmese, giris ekraninda adini yaza bilmez.
+                                "/api/v1/public/**",
                                 "/api/v1/auth/refresh",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",

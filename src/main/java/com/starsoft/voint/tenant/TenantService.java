@@ -26,6 +26,7 @@ public class TenantService {
     public Tenant create(TenantCreateRequest request) {
         Tenant tenant = Tenant.builder()
                 .name(request.name())
+                .subdomain(normalizeSubdomain(request.subdomain(), null))
                 .phoneNumber(request.phoneNumber())
                 .greetingText(request.greetingText())
                 .workingHours(request.workingHours())
@@ -53,6 +54,9 @@ public class TenantService {
     @Transactional
     public Tenant updateConfig(UUID id, TenantConfigUpdateRequest request) {
         Tenant tenant = get(id);
+        if (request.subdomain() != null) {
+            tenant.setSubdomain(normalizeSubdomain(request.subdomain(), tenant.getId()));
+        }
         if (request.phoneNumber() != null) tenant.setPhoneNumber(request.phoneNumber());
         if (request.greetingText() != null) tenant.setGreetingText(request.greetingText());
         if (request.workingHours() != null) tenant.setWorkingHours(request.workingHours());
@@ -65,6 +69,27 @@ public class TenantService {
         // The greeting and the transcriber hints live inside Vapi too; leaving them stale would
         // make the panel disagree with what callers actually hear.
         return syncAssistant(tenant);
+    }
+
+    /**
+     * Validates and claims a subdomain.
+     *
+     * <p>Checked here rather than left to the unique index so the operator gets "bu ünvan artıq
+     * istifadə olunur" instead of a database constraint error, and so a blank value stays null
+     * rather than colliding with every other tenant that has no panel address yet.
+     */
+    private String normalizeSubdomain(String raw, UUID selfId) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String value = Subdomains.normalizeOrThrow(raw);
+        tenantRepository.findBySubdomainIgnoreCase(value).ifPresent(existing -> {
+            if (!existing.getId().equals(selfId)) {
+                throw new IllegalArgumentException(
+                        "Bu ünvan artıq istifadə olunur: " + value + " (" + existing.getName() + ")");
+            }
+        });
+        return value;
     }
 
     /**

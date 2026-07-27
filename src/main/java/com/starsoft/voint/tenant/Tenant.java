@@ -77,6 +77,13 @@ public class Tenant {
     @Builder.Default
     private int monthlyMinuteCap = 0;
 
+    /**
+     * Panel address label: "ces" serves this tenant at ces.voint.az. Unique across the platform,
+     * lowercase - see {@link Subdomains} for what is allowed and what is reserved.
+     */
+    @Column(name = "subdomain", unique = true)
+    private String subdomain;
+
     /** Vapi's id for this tenant's assistant; null until it has been provisioned. */
     @Column(name = "vapi_assistant_id")
     private String vapiAssistantId;

@@ -4,6 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 
 public record TenantCreateRequest(
         @NotBlank String name,
+        /** Panel unvani: "ces" -> ces.voint.az. Bos buraxilsa panel unvani olmur. */
+        String subdomain,
         String phoneNumber,
         String greetingText,
         String workingHours,
