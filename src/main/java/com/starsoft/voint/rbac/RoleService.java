@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -35,15 +36,26 @@ public class RoleService {
     private final PermissionResolver permissions;
     private final com.starsoft.voint.auth.PanelUserRepository userRepository;
 
+    /**
+     * Roles this business may hand out: its own, plus the platform templates.
+     *
+     * <p>Both, always. This used to return the templates only while a business had no roles of its
+     * own, which quietly broke the moment it got one: users already sitting on a template - which
+     * is every first owner account - had a role that was no longer in the list they were displayed
+     * against. The screen then showed them as something they were not, and one careless click
+     * reassigned them. A template is by definition a role offered to businesses; whether a business
+     * also has bespoke roles does not change that.
+     */
     @Transactional(readOnly = true)
     public List<Role> assignableFor(UUID tenantId) {
-        List<Role> own = roleRepository.findByTenantIdOrderByName(tenantId);
-        if (!own.isEmpty()) {
-            return own;
+        List<Role> out = new ArrayList<>(roleRepository.findByTenantIdOrderByName(tenantId));
+        Set<UUID> seen = out.stream().map(Role::getId).collect(java.util.stream.Collectors.toSet());
+        for (Role template : roleRepository.findByTemplateTrueOrderByName()) {
+            if (seen.add(template.getId())) {
+                out.add(template);
+            }
         }
-        // A tenant with no roles of its own can still use the platform templates, so a business
-        // is never in a state where no role can be assigned to its first user.
-        return roleRepository.findByTemplateTrueOrderByName();
+        return out;
     }
 
     @Transactional(readOnly = true)
