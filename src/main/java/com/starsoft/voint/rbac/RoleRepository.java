@@ -17,4 +17,7 @@ public interface RoleRepository extends JpaRepository<Role, UUID> {
     List<Role> findByTemplateTrueOrderByName();
 
     Optional<Role> findByTenantIdAndNameIgnoreCase(UUID tenantId, String name);
+
+    /** Roles filed under one department, used to refuse deleting a department still in use. */
+    long countByDepartmentId(UUID departmentId);
 }

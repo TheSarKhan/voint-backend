@@ -14,6 +14,9 @@ import java.util.UUID;
 public record RoleDetail(
         UUID id,
         UUID tenantId,
+        /** Null = filed under no department; the screen shows these last, under "Departamentsiz". */
+        UUID departmentId,
+        String departmentName,
         String name,
         String description,
         boolean template,

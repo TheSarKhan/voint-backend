@@ -16,6 +16,8 @@ public record RoleUpsertRequest(
         @NotBlank String name,
         String description,
         UUID tenantId,
+        /** Optional. Must belong to the same owner as the role - see RoleService#resolveDepartment. */
+        UUID departmentId,
         boolean template,
         Map<String, List<String>> permissions
 ) {

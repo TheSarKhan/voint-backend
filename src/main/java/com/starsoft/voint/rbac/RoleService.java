@@ -31,6 +31,7 @@ public class RoleService {
 
     private final RoleRepository roleRepository;
     private final RolePermissionRepository permissionRepository;
+    private final DepartmentRepository departmentRepository;
     private final PermissionResolver permissions;
     private final com.starsoft.voint.auth.PanelUserRepository userRepository;
 
@@ -59,7 +60,7 @@ public class RoleService {
     @Transactional
     public Role createOwnerRoleFor(UUID tenantId) {
         return roleRepository.findByTenantIdAndNameIgnoreCase(tenantId, "Sahib")
-                .orElseGet(() -> copyTemplate(OWNER_TEMPLATE_ID, tenantId));
+                .orElseGet(() -> copyTemplate(OWNER_TEMPLATE_ID, tenantId, true));
     }
 
     @Transactional(readOnly = true)
@@ -72,9 +73,12 @@ public class RoleService {
 
     @Transactional
     public RoleDetail create(RoleUpsertRequest request) {
+        String name = request.name().trim();
+        requireNameFree(request.tenantId(), name, null);
         Role role = roleRepository.save(Role.builder()
                 .tenantId(request.tenantId())
-                .name(request.name().trim())
+                .departmentId(resolveDepartment(request.departmentId(), request.tenantId()))
+                .name(name)
                 .description(request.description())
                 .template(request.template())
                 .build());
@@ -86,8 +90,13 @@ public class RoleService {
     public RoleDetail update(UUID roleId, RoleUpsertRequest request) {
         Role role = roleRepository.findById(roleId)
                 .orElseThrow(() -> NotFoundException.of("Rol", roleId));
-        role.setName(request.name().trim());
+        String name = request.name().trim();
+        requireNameFree(role.getTenantId(), name, roleId);
+        role.setName(name);
         role.setDescription(request.description());
+        // Checked against the role's own owner, not the request's: a payload claiming a different
+        // tenant must not be able to move a role somewhere it does not belong.
+        role.setDepartmentId(resolveDepartment(request.departmentId(), role.getTenantId()));
         role = roleRepository.save(role);
         replacePermissions(roleId, request.permissions());
         return toDetail(role);
@@ -111,13 +120,56 @@ public class RoleService {
         permissions.evictRole(roleId);
     }
 
+    /**
+     * The operator copying a template by hand, as opposed to the automatic copy a new business
+     * gets. The result is an ordinary role: not marked system, so it can be deleted again if the
+     * copy turns out to be the wrong starting point.
+     */
     @Transactional
     public RoleDetail copyTemplateTo(UUID templateId, UUID tenantId) {
-        Role copy = copyTemplate(templateId, tenantId);
+        Role template = roleRepository.findById(templateId)
+                .orElseThrow(() -> NotFoundException.of("Şablon rol", templateId));
+        if (template.getTenantId() != null) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Bu, bir müəssisənin öz roludur - şablon deyil, köçürülə bilməz.");
+        }
+        requireNameFree(tenantId, template.getName(), null);
+        Role copy = copyTemplate(templateId, tenantId, false);
         if (copy == null) {
             throw NotFoundException.of("Şablon rol", templateId);
         }
         return toDetail(copy);
+    }
+
+    /**
+     * A department belongs either to the platform or to one business, and so does a role. Letting
+     * them cross would put a business's role inside a platform department - visible in a list it
+     * has no business appearing in - so a mismatch is refused rather than quietly dropped.
+     */
+    private UUID resolveDepartment(UUID departmentId, UUID tenantId) {
+        if (departmentId == null) {
+            return null;
+        }
+        Department department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> NotFoundException.of("Departament", departmentId));
+        if (!java.util.Objects.equals(department.getTenantId(), tenantId)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Bu departament başqa müəssisəyə aiddir.");
+        }
+        return departmentId;
+    }
+
+    /**
+     * The database enforces this too, but a constraint violation surfaces as an unexplained 500.
+     * Saying which name is taken is the difference between a fixable message and a dead end.
+     */
+    private void requireNameFree(UUID tenantId, String name, UUID exceptRoleId) {
+        roleRepository.findByTenantIdAndNameIgnoreCase(tenantId, name)
+                .filter(existing -> !existing.getId().equals(exceptRoleId))
+                .ifPresent(existing -> {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "'" + existing.getName() + "' adlı rol artıq var.");
+                });
     }
 
     /**
@@ -150,29 +202,39 @@ public class RoleService {
             grid.computeIfAbsent(p.getResource().name(), k -> new ArrayList<>())
                     .add(p.getAction().name());
         }
-        return new RoleDetail(role.getId(), role.getTenantId(), role.getName(),
+        String departmentName = role.getDepartmentId() == null ? null
+                : departmentRepository.findById(role.getDepartmentId())
+                        .map(Department::getName).orElse(null);
+
+        return new RoleDetail(role.getId(), role.getTenantId(),
+                role.getDepartmentId(), departmentName, role.getName(),
                 role.getDescription(), role.isTemplate(), role.isSystem(),
                 countUsers(role.getId()), grid);
     }
 
     private long countUsers(UUID roleId) {
-        return userRepository.findAll().stream()
-                .filter(u -> roleId.equals(u.getRoleId()))
-                .count();
+        return userRepository.countByRoleId(roleId);
     }
 
-    private Role copyTemplate(UUID templateId, UUID tenantId) {
+    /**
+     * @param system true only for the owner role a new business is provisioned with, which must
+     *               survive: deleting it would leave the business with nothing to assign anyone.
+     *               A template the operator copies by hand is an ordinary, deletable role.
+     */
+    private Role copyTemplate(UUID templateId, UUID tenantId, boolean system) {
         Role template = roleRepository.findById(templateId).orElse(null);
         if (template == null) {
             log.error("Owner template {} is missing - tenant {} will have no role to assign",
                     templateId, tenantId);
             return null;
         }
+        // Deliberately not the template's department: that one belongs to the platform, and the
+        // business it is being copied into cannot see it.
         Role copy = roleRepository.save(Role.builder()
                 .tenantId(tenantId)
                 .name(template.getName())
                 .description(template.getDescription())
-                .system(true)
+                .system(system)
                 .build());
 
         permissionRepository.saveAll(permissionsOf(templateId).stream()

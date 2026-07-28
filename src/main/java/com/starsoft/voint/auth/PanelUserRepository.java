@@ -18,4 +18,7 @@ public interface PanelUserRepository extends JpaRepository<PanelUser, UUID> {
     List<PanelUser> findByTenantIdIsNullOrderByCreatedAt();
 
     boolean existsByEmailIgnoreCase(String email);
+
+    /** Asked once per role when listing them; counting in the database beats loading every user. */
+    long countByRoleId(UUID roleId);
 }

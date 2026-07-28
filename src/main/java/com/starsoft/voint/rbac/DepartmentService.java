@@ -64,9 +64,7 @@ public class DepartmentService {
     }
 
     private DepartmentDetail toDetail(Department d) {
-        long roles = roleRepository.findAll().stream()
-                .filter(r -> d.getId().equals(r.getDepartmentId()))
-                .count();
+        long roles = roleRepository.countByDepartmentId(d.getId());
         return new DepartmentDetail(d.getId(), d.getTenantId(), d.getName(),
                 d.getDescription(), roles);
     }
