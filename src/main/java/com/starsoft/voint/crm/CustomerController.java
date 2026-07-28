@@ -1,5 +1,7 @@
 package com.starsoft.voint.crm;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,6 +36,7 @@ public class CustomerController {
     private final CallRepository callRepository;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.CUSTOMER, action = Permission.Action.READ)
     @GetMapping
     @Operation(summary = "List customers of the tenant")
     public List<CustomerResponse> list(@PathVariable("id") UUID tenantId) {
@@ -41,6 +44,7 @@ public class CustomerController {
         return customerService.list(tenantId).stream().map(this::toResponse).toList();
     }
 
+    @RequirePermission(resource = Permission.Resource.CUSTOMER, action = Permission.Action.READ)
     @GetMapping("/{customerId}")
     @Operation(summary = "Get a customer card")
     public CustomerResponse get(@PathVariable("id") UUID tenantId, @PathVariable UUID customerId) {
@@ -48,6 +52,7 @@ public class CustomerController {
         return toResponse(customerService.get(tenantId, customerId));
     }
 
+    @RequirePermission(resource = Permission.Resource.CUSTOMER, action = Permission.Action.CREATE)
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a customer card")
@@ -57,6 +62,7 @@ public class CustomerController {
         return toResponse(customerService.create(tenantId, request));
     }
 
+    @RequirePermission(resource = Permission.Resource.CUSTOMER, action = Permission.Action.UPDATE)
     @PatchMapping("/{customerId}")
     @Operation(summary = "Partially update a customer card")
     public CustomerResponse update(@PathVariable("id") UUID tenantId,
