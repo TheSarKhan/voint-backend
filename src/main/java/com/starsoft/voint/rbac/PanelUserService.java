@@ -46,6 +46,9 @@ public class PanelUserService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final PermissionResolver permissions;
+    private final com.starsoft.voint.mail.MailService mail;
+    private final com.starsoft.voint.tenant.TenantRepository tenantRepository;
+    private final com.starsoft.voint.settings.PlatformSettingsService settings;
 
     @Transactional(readOnly = true)
     public List<PanelUserResponse> listForTenant(UUID tenantId) {
@@ -83,7 +86,13 @@ public class PanelUserService {
         user = userRepository.save(user);
 
         log.info("Created panel user {} for tenant {} with role '{}'", email, tenantId, role.getName());
-        return new PanelUserCreatedResponse(PanelUserResponse.from(user, role.getName()), password);
+
+        boolean emailed = tryEmail(email, tenantId, password, true);
+        // The password is returned only when it could NOT be sent. Putting it in the response
+        // regardless would mean it appears on a screen the operator no longer needs to read,
+        // and gets copied into places it should not live.
+        return new PanelUserCreatedResponse(
+                PanelUserResponse.from(user, role.getName()), emailed ? null : password, emailed);
     }
 
     /**
@@ -97,8 +106,10 @@ public class PanelUserService {
         user.setPasswordHash(passwordEncoder.encode(password));
         user = userRepository.save(user);
         log.info("Reset password for panel user {}", user.getEmail());
+        boolean emailed = tryEmail(user.getEmail(), user.getTenantId(), password, false);
         return new PanelUserCreatedResponse(
-                PanelUserResponse.from(user, roleName(user.getRoleId())), password);
+                PanelUserResponse.from(user, roleName(user.getRoleId())),
+                emailed ? null : password, emailed);
     }
 
     @Transactional
@@ -142,6 +153,47 @@ public class PanelUserService {
         userRepository.delete(user);
         permissions.evictUser(user);
         log.info("Deleted panel user {}", user.getEmail());
+    }
+
+    /**
+     * @return true if the message actually left. A failure here must not undo the account - the
+     *         password is already set, so losing the user because the mail server hiccuped would
+     *         be the worse outcome. The caller shows the password instead.
+     */
+    private boolean tryEmail(String email, UUID tenantId, String password, boolean welcome) {
+        if (!mail.isConfigured()) {
+            return false;
+        }
+        try {
+            String tenantName = tenantId == null ? "Voint"
+                    : tenantRepository.findById(tenantId)
+                            .map(com.starsoft.voint.tenant.Tenant::getName).orElse("Voint");
+            String url = panelUrl(tenantId);
+            mail.send(email,
+                    welcome ? "Voint panelinizə giriş" : "Voint şifrəniz yeniləndi",
+                    welcome
+                            ? com.starsoft.voint.mail.MailTemplates.welcome(tenantName, url, email, password)
+                            : com.starsoft.voint.mail.MailTemplates.passwordReset(url, email, password));
+            return true;
+        } catch (Exception e) {
+            log.error("Could not email credentials to {} - falling back to showing them: {}",
+                    email, e.getMessage());
+            return false;
+        }
+    }
+
+    /** The tenant's own address when it has a subdomain, otherwise the shared panel. */
+    private String panelUrl(UUID tenantId) {
+        String domain = settings.get(
+                com.starsoft.voint.settings.SettingKey.PANEL_DOMAIN);
+        if (tenantId == null) {
+            return "https://voint-admin." + domain;
+        }
+        return tenantRepository.findById(tenantId)
+                .map(com.starsoft.voint.tenant.Tenant::getSubdomain)
+                .filter(sub -> sub != null && !sub.isBlank())
+                .map(sub -> "https://" + sub + "." + domain)
+                .orElse("https://voint." + domain);
     }
 
     // ---------------------------------------------------------------- helpers

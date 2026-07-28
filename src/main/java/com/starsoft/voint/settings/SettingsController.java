@@ -47,11 +47,14 @@ public class SettingsController {
     private static final java.util.regex.Pattern DOMAIN = java.util.regex.Pattern.compile(
             "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$");
 
+    private static final java.util.regex.Pattern PORT = java.util.regex.Pattern.compile("^\\d{1,5}$");
+
     private final PlatformSettingsService settings;
     private final ProviderProbe probe;
     private final VapiSyncService vapiSync;
     private final ProviderHealthService providerHealth;
     private final TenantAccessGuard tenantAccessGuard;
+    private final com.starsoft.voint.mail.MailService mailService;
 
     @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.READ, tenantScoped = false)
     @GetMapping("/api/v1/admin/settings")
@@ -127,6 +130,26 @@ public class SettingsController {
         return list();
     }
 
+    /**
+     * Actually sends a message. Saving the five SMTP fields proves nothing - the server can
+     * still refuse the credentials, the sender address can be unverified, or the port can be
+     * blocked - and the first person to discover that should not be a new customer waiting for
+     * a login that never arrives.
+     */
+    @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.UPDATE,
+            tenantScoped = false)
+    @PostMapping("/api/v1/admin/settings/test-email")
+    @Operation(summary = "Send a test email to the given address")
+    public Map<String, String> testEmail(@RequestBody Map<String, String> body) {
+        tenantAccessGuard.requireSuperAdmin();
+        String to = body.get("to");
+        if (to == null || !to.contains("@")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Düzgün e-poçt ünvanı yazın");
+        }
+        mailService.send(to, "Voint - test mesajı", com.starsoft.voint.mail.MailTemplates.test());
+        return Map.of("sent", to);
+    }
+
     @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.READ, tenantScoped = false)
     @PostMapping("/api/v1/admin/settings/recheck")
     @Operation(summary = "Re-probe every provider now instead of waiting for the timer")
@@ -159,6 +182,18 @@ public class SettingsController {
                     probe.elevenLabs(settings.get(SettingKey.ELEVENLABS_API_KEY), value);
             case GEMINI_API_KEY -> probe.gemini(value);
             case VAPI_PRIVATE_KEY -> probe.vapi(value);
+            // An SMTP field cannot be verified on its own - the server only accepts the five
+            // together - so only the shape is checked here. The real test is the "Test e-poçtu"
+            // button, which actually sends one.
+            case SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD ->
+                    new ProviderProbe.Result(true, "Yadda saxlanıldı");
+            case SMTP_PORT -> PORT.matcher(value).matches()
+                    ? new ProviderProbe.Result(true, "Port qəbul edildi")
+                    : new ProviderProbe.Result(false, "Port yalnız rəqəm ola bilər, məsələn 587");
+            case SMTP_FROM -> value.contains("@")
+                    ? new ProviderProbe.Result(true, "Ünvan qəbul edildi")
+                    : new ProviderProbe.Result(false,
+                            "E-poçt ünvanı olmalıdır, məsələn: Voint <panel@voint.az>");
             // Nothing to probe - a domain is not a credential. Only reject shapes that would
             // silently produce broken addresses, like a pasted URL or a leading dot.
             case PANEL_DOMAIN -> DOMAIN.matcher(value).matches()

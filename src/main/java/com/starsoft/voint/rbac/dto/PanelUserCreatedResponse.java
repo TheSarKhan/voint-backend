@@ -9,6 +9,8 @@ package com.starsoft.voint.rbac.dto;
  */
 public record PanelUserCreatedResponse(
         PanelUserResponse user,
-        String password
+        /** Null when the credentials were emailed - there is then nothing to show or copy. */
+        String password,
+        boolean emailed
 ) {
 }

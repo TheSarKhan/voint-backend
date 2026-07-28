@@ -34,7 +34,23 @@ public enum SettingKey {
      * not a redeploy plus a hunt for hardcoded suffixes across two frontends.
      */
     PANEL_DOMAIN("panel.domain", "Panel domeni", false,
-            "Müəssisə panellərinin ünvanı: ces.<domen>. Domen dəyişəndə yalnız buranı dəyiş.");
+            "Müəssisə panellərinin ünvanı: ces.<domen>. Domen dəyişəndə yalnız buranı dəyiş."),
+
+    /*
+     * SMTP. Beşi də təyin olunmasa e-poçt göndərilmir və sistem şifrəni ekranda göstərməyə
+     * qayıdır — yarımçıq konfiqurasiya ilə "göndərildi" deyib heç nə göndərməmək ən pisidir.
+     */
+    SMTP_HOST("smtp.host", "SMTP server", false,
+            "Məsələn smtp.resend.com. Beş SMTP sahəsi dolmasa e-poçt göndərilmir."),
+
+    SMTP_PORT("smtp.port", "SMTP port", false, "Adətən 587 (STARTTLS)."),
+
+    SMTP_USERNAME("smtp.username", "SMTP istifadəçi", false, "Provayderin verdiyi istifadəçi adı."),
+
+    SMTP_PASSWORD("smtp.password", "SMTP şifrə", true, "Provayderin verdiyi şifrə və ya API açarı."),
+
+    SMTP_FROM("smtp.from", "Göndərən ünvan", false,
+            "Məsələn Voint <panel@voint.az>. Domen SPF/DKIM ilə doğrulanmalıdır, yoxsa spama düşür.");
 
     private final String key;
     private final String label;

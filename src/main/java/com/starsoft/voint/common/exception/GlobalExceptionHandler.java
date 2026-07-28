@@ -82,7 +82,8 @@ public class GlobalExceptionHandler {
 
     /** A third party refusing us is not our bug; say which one and what it said. */
     @ExceptionHandler({VapiAssistantProvisioner.ProvisioningException.class,
-            VapiSyncService.VapiSyncException.class})
+            VapiSyncService.VapiSyncException.class,
+            com.starsoft.voint.mail.MailService.MailException.class})
     public ProblemDetail handleUpstream(RuntimeException ex) {
         log.error("Upstream provider call failed", ex);
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());

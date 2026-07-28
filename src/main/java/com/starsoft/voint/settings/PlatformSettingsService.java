@@ -52,6 +52,21 @@ public class PlatformSettingsService {
     @Value("${voint.panel.domain:sarkhan.az}")
     private String configuredPanelDomain;
 
+    @Value("${voint.smtp.host:}")
+    private String configuredSmtpHost;
+
+    @Value("${voint.smtp.port:587}")
+    private String configuredSmtpPort;
+
+    @Value("${voint.smtp.username:}")
+    private String configuredSmtpUsername;
+
+    @Value("${voint.smtp.password:}")
+    private String configuredSmtpPassword;
+
+    @Value("${voint.smtp.from:}")
+    private String configuredSmtpFrom;
+
     /** The effective value: database first, then server configuration, else empty string. */
     public String get(SettingKey key) {
         String stored = fromDatabase(key);
@@ -131,6 +146,11 @@ public class PlatformSettingsService {
             case GEMINI_API_KEY -> nullSafe(configuredGeminiKey);
             case VAPI_PRIVATE_KEY -> nullSafe(configuredVapiPrivateKey);
             case PANEL_DOMAIN -> nullSafe(configuredPanelDomain);
+            case SMTP_HOST -> nullSafe(configuredSmtpHost);
+            case SMTP_PORT -> nullSafe(configuredSmtpPort);
+            case SMTP_USERNAME -> nullSafe(configuredSmtpUsername);
+            case SMTP_PASSWORD -> nullSafe(configuredSmtpPassword);
+            case SMTP_FROM -> nullSafe(configuredSmtpFrom);
         };
     }
 
