@@ -1,5 +1,8 @@
 package com.starsoft.voint.lead;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.Map;
 import java.util.UUID;
 
@@ -46,6 +49,7 @@ public class LeadController {
     private final LeadRateLimiter rateLimiter;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.LEAD, action = Permission.Action.READ, tenantScoped = false)
     @PostMapping("/api/v1/public/leads")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Submit a pilot request (public, rate limited)")
@@ -58,6 +62,7 @@ public class LeadController {
         return LeadResponse.from(leadService.submit(request));
     }
 
+    @RequirePermission(resource = Permission.Resource.LEAD, action = Permission.Action.READ, tenantScoped = false)
     @GetMapping("/api/v1/admin/leads")
     @Operation(summary = "List pilot requests, paginated (SUPER_ADMIN only)")
     public PageResponse<LeadResponse> list(
@@ -73,6 +78,7 @@ public class LeadController {
         return PageResponse.of(leadService.search(q, status, pageable), LeadResponse::from);
     }
 
+    @RequirePermission(resource = Permission.Resource.LEAD, action = Permission.Action.READ, tenantScoped = false)
     @GetMapping("/api/v1/admin/leads/summary")
     @Operation(summary = "How many pilot requests are still untouched (SUPER_ADMIN only)")
     public Map<String, Long> summary() {
@@ -80,6 +86,7 @@ public class LeadController {
         return Map.of("newCount", leadService.countNew());
     }
 
+    @RequirePermission(resource = Permission.Resource.LEAD, action = Permission.Action.READ, tenantScoped = false)
     @PatchMapping("/api/v1/admin/leads/{id}")
     @Operation(summary = "Update the status or note of a pilot request (SUPER_ADMIN only)")
     public LeadResponse update(@PathVariable UUID id,

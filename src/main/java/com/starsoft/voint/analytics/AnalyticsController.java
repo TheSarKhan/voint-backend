@@ -1,5 +1,8 @@
 package com.starsoft.voint.analytics;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.UUID;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,6 +26,7 @@ public class AnalyticsController {
     private final AnalyticsService analyticsService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)
     @GetMapping
     @Operation(summary = "Call count, resolution rate and average duration for the tenant")
     public AnalyticsResponse analytics(@PathVariable("id") UUID tenantId) {

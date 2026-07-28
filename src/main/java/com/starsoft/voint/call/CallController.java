@@ -1,5 +1,8 @@
 package com.starsoft.voint.call;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +33,7 @@ public class CallController {
     private final CallService callService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)
     @GetMapping
     @Operation(summary = "List calls of the tenant")
     public List<CallResponse> list(@PathVariable("id") UUID tenantId) {
@@ -37,6 +41,7 @@ public class CallController {
         return callService.list(tenantId).stream().map(CallResponse::from).toList();
     }
 
+    @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)
     @GetMapping("/{callId}")
     @Operation(summary = "Get a single call, including its transcript + AI summary when available")
     public CallDetailResponse get(@PathVariable("id") UUID tenantId, @PathVariable UUID callId) {
@@ -45,6 +50,7 @@ public class CallController {
         return CallDetailResponse.from(call, callService.getTranscript(call.getId()));
     }
 
+    @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a call record manually (testing; later fed by Vapi call events)")

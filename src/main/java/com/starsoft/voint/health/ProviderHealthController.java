@@ -1,5 +1,8 @@
 package com.starsoft.voint.health;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.List;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +22,7 @@ public class ProviderHealthController {
     private final ProviderHealthService providerHealthService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.READ, tenantScoped = false)
     @GetMapping("/api/v1/admin/providers")
     @Operation(summary = "Health of ElevenLabs / Gemini credentials (SUPER_ADMIN only)")
     public List<ProviderHealth> providers() {

@@ -1,5 +1,8 @@
 package com.starsoft.voint.auth;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.security.Principal;
 
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,18 +30,21 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @PublicEndpoint("Giris")
     @PostMapping("/login")
     @Operation(summary = "Login with email + password, returns access & refresh JWTs")
     public TokenResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
 
+    @PublicEndpoint("Token yenileme")
     @PostMapping("/refresh")
     @Operation(summary = "Exchange a refresh token for a new token pair")
     public TokenResponse refresh(@Valid @RequestBody RefreshRequest request) {
         return authService.refresh(request);
     }
 
+    @PublicEndpoint("Her giris etmis istifadeci oz melumatini gorur")
     @GetMapping("/me")
     @Operation(summary = "Current authenticated panel user", security = @SecurityRequirement(name = "bearerAuth"))
     public MeResponse me(Principal principal) {

@@ -47,7 +47,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     String role = claims.get("role", String.class);
                     String tenantIdClaim = claims.get("tenantId", String.class);
                     UUID tenantId = tenantIdClaim != null ? UUID.fromString(tenantIdClaim) : null;
-                    var principal = new AuthenticatedUser(email, tenantId, role);
+                    String roleIdClaim = claims.get("roleId", String.class);
+                    UUID roleId = roleIdClaim != null ? UUID.fromString(roleIdClaim) : null;
+                    var principal = new AuthenticatedUser(email, tenantId, role, roleId);
                     var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + (role != null ? role : "USER")));
                     var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

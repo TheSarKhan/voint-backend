@@ -52,6 +52,9 @@ public class JwtService {
                 .subject(user.getEmail())
                 .claim("uid", user.getId().toString())
                 .claim("role", user.getRole())
+                // Permissions hang off the role, so the token carries which role - otherwise
+                // every single request would need a database lookup just to know what is allowed.
+                .claim("roleId", user.getRoleId() != null ? user.getRoleId().toString() : null)
                 .claim("type", type)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(ttl)));

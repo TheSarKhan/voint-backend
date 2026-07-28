@@ -1,5 +1,8 @@
 package com.starsoft.voint.reservation;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,6 +31,7 @@ public class ReservationController {
     private final ReservationService reservationService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.RESERVATION, action = Permission.Action.READ)
     @GetMapping
     @Operation(summary = "List reservation requests of the tenant")
     public List<ReservationResponse> list(@PathVariable("id") UUID tenantId) {
@@ -35,6 +39,7 @@ public class ReservationController {
         return reservationService.list(tenantId).stream().map(ReservationResponse::from).toList();
     }
 
+    @RequirePermission(resource = Permission.Resource.RESERVATION, action = Permission.Action.READ)
     @PatchMapping("/{resId}")
     @Operation(summary = "Confirm or reject a reservation request")
     public ReservationResponse update(@PathVariable("id") UUID tenantId,

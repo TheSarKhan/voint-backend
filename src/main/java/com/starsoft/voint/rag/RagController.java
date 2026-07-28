@@ -1,5 +1,8 @@
 package com.starsoft.voint.rag;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,6 +34,7 @@ public class RagController {
     private final RagService ragService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.RAG, action = Permission.Action.READ)
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Add a RAG document for the tenant (embedding computed in a later stage)")
@@ -40,6 +44,7 @@ public class RagController {
         return RagDocumentResponse.from(ragService.create(tenantId, request));
     }
 
+    @RequirePermission(resource = Permission.Resource.RAG, action = Permission.Action.READ)
     @GetMapping
     @Operation(summary = "List all RAG documents of the tenant")
     public List<RagDocumentResponse> list(@PathVariable("id") UUID tenantId) {
@@ -47,6 +52,7 @@ public class RagController {
         return ragService.list(tenantId).stream().map(RagDocumentResponse::from).toList();
     }
 
+    @RequirePermission(resource = Permission.Resource.RAG, action = Permission.Action.READ)
     @DeleteMapping("/{docId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete a RAG document")

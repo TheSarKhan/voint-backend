@@ -1,5 +1,8 @@
 package com.starsoft.voint.voice;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -32,6 +35,7 @@ public class VoiceWebhookController {
     private final VoiceWebhookService voiceWebhookService;
     private final VapiEventService vapiEventService;
 
+    @PublicEndpoint("Vapi custom-LLM webhook-u - x-vapi-secret ile qorunur")
     @PostMapping({"/webhook", "/chat/completions"})
     @Operation(summary = "Vapi custom-LLM webhook",
             description = """
@@ -68,6 +72,7 @@ public class VoiceWebhookController {
                 .body(voiceWebhookService.handleAsJsonBody(request));
     }
 
+    @PublicEndpoint("Vapi hadise webhook-u - x-vapi-secret ile qorunur")
     @PostMapping("/events")
     @ResponseStatus(HttpStatus.OK)
     @Operation(summary = "Vapi server event webhook (call lifecycle)",

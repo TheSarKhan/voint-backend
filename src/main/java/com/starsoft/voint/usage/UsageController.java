@@ -1,5 +1,8 @@
 package com.starsoft.voint.usage;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,6 +32,7 @@ public class UsageController {
     private final UsageService usageService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.BILLING, action = Permission.Action.READ, tenantScoped = false)
     @GetMapping("/api/v1/admin/usage")
     @Operation(summary = "Usage and billing per tenant, paginated and sorted (SUPER_ADMIN only)")
     public PageResponse<UsageReport> allTenants(
@@ -41,6 +45,7 @@ public class UsageController {
         return usageService.pagedReport(month, sort, direction, page, size);
     }
 
+    @RequirePermission(resource = Permission.Resource.BILLING, action = Permission.Action.READ)
     @GetMapping("/api/v1/tenants/{tenantId}/usage")
     @Operation(summary = "Usage and billing for one tenant in a month")
     public UsageReport forTenant(@PathVariable UUID tenantId,
@@ -49,6 +54,7 @@ public class UsageController {
         return usageService.reportFor(tenantId, month);
     }
 
+    @RequirePermission(resource = Permission.Resource.BILLING, action = Permission.Action.UPDATE)
     @PutMapping("/api/v1/tenants/{tenantId}/billing")
     @Operation(summary = "Set a tenant's commercial terms (SUPER_ADMIN only)")
     public TenantResponse updateBillingPlan(@PathVariable UUID tenantId,

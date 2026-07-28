@@ -1,5 +1,8 @@
 package com.starsoft.voint.rbac;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +38,7 @@ public class PanelUserController {
     private final RoleService roleService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.READ)
     @GetMapping
     @Operation(summary = "Accounts belonging to this business")
     public List<PanelUserResponse> list(@PathVariable UUID tenantId) {
@@ -43,6 +47,7 @@ public class PanelUserController {
     }
 
     /** Roles this business may assign - its own, or the platform templates. */
+    @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.READ)
     @GetMapping("/assignable-roles")
     @Operation(summary = "Roles that can be given to a user here")
     public List<Map<String, Object>> assignableRoles(@PathVariable UUID tenantId) {
@@ -55,6 +60,7 @@ public class PanelUserController {
                 .toList();
     }
 
+    @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.CREATE)
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create an account; the generated password is returned once")
@@ -64,6 +70,7 @@ public class PanelUserController {
         return userService.create(tenantId, request);
     }
 
+    @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.UPDATE)
     @PostMapping("/{userId}/reset-password")
     @Operation(summary = "Issue a new password; the old one stops working immediately")
     public PanelUserCreatedResponse resetPassword(@PathVariable UUID tenantId,
@@ -72,6 +79,7 @@ public class PanelUserController {
         return userService.resetPassword(tenantId, userId);
     }
 
+    @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.UPDATE)
     @PutMapping("/{userId}/status")
     @Operation(summary = "Block or unblock an account")
     public PanelUserResponse setStatus(@PathVariable UUID tenantId,
@@ -81,6 +89,7 @@ public class PanelUserController {
         return userService.setStatus(tenantId, userId, body.get("status"));
     }
 
+    @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.UPDATE)
     @PutMapping("/{userId}/role")
     @Operation(summary = "Change which role applies to this account")
     public PanelUserResponse changeRole(@PathVariable UUID tenantId,
@@ -90,6 +99,7 @@ public class PanelUserController {
         return userService.changeRole(tenantId, userId, body.get("roleId"));
     }
 
+    @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.DELETE)
     @DeleteMapping("/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Remove an account; refused if it is the last active one")

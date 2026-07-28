@@ -17,7 +17,13 @@ import org.springframework.security.core.AuthenticatedPrincipal;
  * {@code tenantId} is nullable: a platform-wide {@code SUPER_ADMIN} user is not scoped
  * to any single tenant.
  */
-public record AuthenticatedUser(String email, UUID tenantId, String role) implements AuthenticatedPrincipal {
+public record AuthenticatedUser(String email, UUID tenantId, String role, UUID roleId)
+        implements AuthenticatedPrincipal {
+
+    /** Tokens issued before roles existed carry no roleId; they expire within the hour. */
+    public AuthenticatedUser(String email, UUID tenantId, String role) {
+        this(email, tenantId, role, null);
+    }
 
     @Override
     public String getName() {

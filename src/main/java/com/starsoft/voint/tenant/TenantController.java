@@ -1,5 +1,8 @@
 package com.starsoft.voint.tenant;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -38,6 +41,7 @@ public class TenantController {
     private final TenantService tenantService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.TENANT, action = Permission.Action.CREATE, tenantScoped = false)
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a new tenant (business)")
@@ -45,6 +49,7 @@ public class TenantController {
         return TenantResponse.from(tenantService.create(request));
     }
 
+    @RequirePermission(resource = Permission.Resource.TENANT, action = Permission.Action.READ, tenantScoped = false)
     @GetMapping
     @Operation(summary = "Search tenants, paginated and sorted (SUPER_ADMIN only)")
     public PageResponse<TenantResponse> list(
@@ -59,6 +64,7 @@ public class TenantController {
         return PageResponse.of(tenantService.search(q, pageable), TenantResponse::from);
     }
 
+    @RequirePermission(resource = Permission.Resource.TENANT, action = Permission.Action.READ, tenantScoped = false)
     @GetMapping("/{key}")
     @Operation(summary = "Get a tenant by id or by subdomain")
     public TenantResponse get(@PathVariable String key) {
@@ -69,6 +75,7 @@ public class TenantController {
         return TenantResponse.from(tenant);
     }
 
+    @RequirePermission(resource = Permission.Resource.TENANT, action = Permission.Action.UPDATE, tenantScoped = false)
     @PostMapping("/{id}/vapi-sync")
     @Operation(summary = "Recreate or update this tenant's Vapi assistant (SUPER_ADMIN only)")
     public TenantResponse syncVapi(@PathVariable UUID id) {
@@ -76,6 +83,7 @@ public class TenantController {
         return TenantResponse.from(tenantService.syncAssistantOrThrow(id));
     }
 
+    @RequirePermission(resource = Permission.Resource.TENANT, action = Permission.Action.UPDATE, tenantScoped = false)
     @PostMapping("/vapi-sync-all")
     @Operation(summary = "Re-push every tenant to Vapi - use after changing a platform-wide voice setting")
     public Map<String, Integer> syncAllVapi() {
@@ -83,6 +91,7 @@ public class TenantController {
         return Map.of("synced", tenantService.syncAllAssistants());
     }
 
+    @RequirePermission(resource = Permission.Resource.SETTINGS, action = Permission.Action.UPDATE)
     @PutMapping("/{id}/config")
     @Operation(summary = "Update tenant configuration (greeting, working hours, handoff, languages)")
     public TenantResponse updateConfig(@PathVariable UUID id,

@@ -1,5 +1,8 @@
 package com.starsoft.voint.tenant;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -40,6 +43,7 @@ public class PublicTenantController {
      * from sarkhan.az to voint.az would mean editing suffix strings in two apps and redeploying;
      * with it, the move is one field in the admin panel.
      */
+    @PublicEndpoint("Panel domenini giris ekrani ucun oxuyur")
     @GetMapping("/api/v1/public/config")
     @Operation(summary = "Platform values needed before login")
     public PublicConfig config() {
@@ -50,6 +54,7 @@ public class PublicTenantController {
     public record PublicTenant(UUID id, String name, String subdomain) {
     }
 
+    @PublicEndpoint("Giris ekraninda muessisenin adini gostermek ucun")
     @GetMapping("/api/v1/public/tenants/by-subdomain/{subdomain}")
     @Operation(summary = "Resolve a panel subdomain to the business it belongs to")
     public PublicTenant bySubdomain(@PathVariable String subdomain) {

@@ -1,5 +1,8 @@
 package com.starsoft.voint.settings;
 
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.PublicEndpoint;
+import com.starsoft.voint.rbac.RequirePermission;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +53,7 @@ public class SettingsController {
     private final ProviderHealthService providerHealth;
     private final TenantAccessGuard tenantAccessGuard;
 
+    @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.READ, tenantScoped = false)
     @GetMapping("/api/v1/admin/settings")
     @Operation(summary = "All credentials, masked (SUPER_ADMIN only)")
     public List<SettingView> list() {
@@ -74,6 +78,7 @@ public class SettingsController {
         return out;
     }
 
+    @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.UPDATE, tenantScoped = false)
     @PutMapping("/api/v1/admin/settings/{key}")
     @Operation(summary = "Verify a credential against its provider, then store it (SUPER_ADMIN only)")
     public List<SettingView> update(@PathVariable String key,
@@ -112,6 +117,7 @@ public class SettingsController {
         return list();
     }
 
+    @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.UPDATE, tenantScoped = false)
     @DeleteMapping("/api/v1/admin/settings/{key}")
     @Operation(summary = "Fall a credential back to the server configuration (SUPER_ADMIN only)")
     public List<SettingView> clear(@PathVariable String key) {
@@ -121,6 +127,7 @@ public class SettingsController {
         return list();
     }
 
+    @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.READ, tenantScoped = false)
     @PostMapping("/api/v1/admin/settings/recheck")
     @Operation(summary = "Re-probe every provider now instead of waiting for the timer")
     public List<ProviderHealth> recheck() {

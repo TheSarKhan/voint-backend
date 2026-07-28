@@ -45,6 +45,7 @@ public class PanelUserService {
     private final PanelUserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PermissionResolver permissions;
 
     @Transactional(readOnly = true)
     public List<PanelUserResponse> listForTenant(UUID tenantId) {
@@ -108,6 +109,8 @@ public class PanelUserService {
         PanelUser user = requireUserOfTenant(tenantId, userId);
         user.setStatus(status);
         user = userRepository.save(user);
+        // Blocking has to take effect on the next request, not when the token happens to expire.
+        permissions.evictUser(user);
         return PanelUserResponse.from(user, roleName(user.getRoleId()));
     }
 
@@ -117,6 +120,7 @@ public class PanelUserService {
         Role role = requireAssignableRole(roleId, tenantId);
         user.setRoleId(role.getId());
         user = userRepository.save(user);
+        permissions.evictUser(user);
         return PanelUserResponse.from(user, role.getName());
     }
 
@@ -136,6 +140,7 @@ public class PanelUserService {
         }
 
         userRepository.delete(user);
+        permissions.evictUser(user);
         log.info("Deleted panel user {}", user.getEmail());
     }
 
