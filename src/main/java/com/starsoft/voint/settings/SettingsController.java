@@ -111,7 +111,10 @@ public class SettingsController {
                 log.info("{} saved - {}", settingKey.getKey(), result);
             } catch (VapiSyncService.VapiSyncException e) {
                 rollback(settingKey, hadOwnValue, previous);
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                // 422, not 502: Cloudflare replaces an origin 502 with its own error page and this
+                // explanation - the one thing the operator needs - never arrives. See
+                // GlobalExceptionHandler#handleUpstream.
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "Vapi-yə ötürülmədi, ona görə dəyişiklik geri alındı: " + e.getMessage(), e);
             }
         }

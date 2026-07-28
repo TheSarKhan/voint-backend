@@ -44,13 +44,16 @@ public class MailService {
     }
 
     /**
-     * @throws MailException when SMTP is unconfigured or the server refuses the message. Never
-     *                       swallowed: the caller has just promised a user an email, so a silent
-     *                       failure would leave them waiting for something that will never arrive.
+     * @throws MailNotConfiguredException when no SMTP account has been set up yet
+     * @throws MailException              when the server refuses the message. Never swallowed: the
+     *                                    caller has just promised a user an email, so a silent
+     *                                    failure would leave them waiting for something that will
+     *                                    never arrive.
      */
     public void send(String to, String subject, String htmlBody) {
         if (!isConfigured()) {
-            throw new MailException("SMTP ayarları tam deyil - Ayarlar bölməsində beş sahəni doldur");
+            throw new MailNotConfiguredException(
+                    "SMTP ayarları tam deyil - Ayarlar bölməsində beş sahəni doldur");
         }
         try {
             JavaMailSenderImpl sender = sender();
@@ -99,6 +102,17 @@ public class MailService {
 
         public MailException(String message, Throwable cause) {
             super(message, cause);
+        }
+    }
+
+    /**
+     * Kept apart from a send failure on purpose. "No SMTP account yet" is a state we ship in and
+     * expect - it must not be logged as an error with a stack trace, and the caller may legitimately
+     * decide to carry on without mail (see the show-the-password-once fallback when creating a user).
+     */
+    public static class MailNotConfiguredException extends MailException {
+        public MailNotConfiguredException(String message) {
+            super(message);
         }
     }
 }

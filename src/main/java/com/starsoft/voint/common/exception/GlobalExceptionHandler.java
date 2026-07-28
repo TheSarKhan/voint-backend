@@ -80,13 +80,34 @@ public class GlobalExceptionHandler {
         return pd;
     }
 
-    /** A third party refusing us is not our bug; say which one and what it said. */
+    /**
+     * Not an error, and not logged as one: the platform is expected to run without an SMTP account.
+     * The panel shows this text to tell the operator which five fields to fill in.
+     */
+    @ExceptionHandler(com.starsoft.voint.mail.MailService.MailNotConfiguredException.class)
+    public ProblemDetail handleMailNotConfigured(RuntimeException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
+        pd.setTitle("Mail not configured");
+        return pd;
+    }
+
+    /**
+     * A third party refusing us is not our bug; say which one and what it said.
+     *
+     * <p>Deliberately 422 and not the semantically nicer 502. We sit behind Cloudflare, which
+     * treats a 502 from the origin as "this site is down" and serves its own error page instead -
+     * so the whole point of this handler, the provider's actual complaint, was being thrown away
+     * before it reached the panel. The operator saw a bare "error code: 502". Any status Cloudflare
+     * passes through untouched is worth more here than the correct one it eats.
+     */
     @ExceptionHandler({VapiAssistantProvisioner.ProvisioningException.class,
             VapiSyncService.VapiSyncException.class,
             com.starsoft.voint.mail.MailService.MailException.class})
     public ProblemDetail handleUpstream(RuntimeException ex) {
         log.error("Upstream provider call failed", ex);
-        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
         pd.setTitle("Provider unavailable");
         pd.setType(URI.create("https://voint.starsoft.com/errors/upstream"));
         return pd;
