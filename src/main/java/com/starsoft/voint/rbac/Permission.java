@@ -35,7 +35,14 @@ public final class Permission {
         RESERVATION("Rezervasiyalar", false),
         RAG("Bilik bazası", false),
         BILLING("Hesablaşma", false),
-        SETTINGS("Ayarlar", false);
+        SETTINGS("Ayarlar", false),
+
+        /**
+         * The approval queue. READ shows it; UPDATE decides on the entries in it - there is no
+         * CREATE, because nobody creates an approval request on purpose: it is what a held
+         * operation turns into.
+         */
+        APPROVAL("Təsdiqlər", false);
 
         private final String label;
         /** True when this resource has no meaning inside a single business. */

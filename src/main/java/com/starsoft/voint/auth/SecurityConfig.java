@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -36,6 +37,7 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final VapiWebhookAuthFilter vapiWebhookAuthFilter;
+    private final com.starsoft.voint.approval.ApprovalReplayFilter approvalReplayFilter;
 
     @Value("${voint.cors.allowed-origins:http://localhost:5173}")
     private String allowedOrigins;
@@ -69,6 +71,9 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .addFilterBefore(vapiWebhookAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                // Before the JWT filter: an approved operation is replayed with a one-shot secret
+                // instead of a token, and that secret authenticates it as the person who asked.
+                .addFilterBefore(approvalReplayFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
@@ -76,6 +81,25 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * Keeps the replay filter out of the plain servlet chain.
+     *
+     * <p>Spring Boot registers every Filter bean with the servlet container as well, where it would
+     * run before Spring Security's own context filter - which then replaces whatever authentication
+     * it had installed with an empty one, and OncePerRequestFilter would not let it run a second
+     * time inside the chain to put it back. Disabling that registration leaves exactly one place it
+     * runs: after the context filter, where what it sets survives.
+     */
+    @Bean
+    public FilterRegistrationBean<com.starsoft.voint.approval.ApprovalReplayFilter>
+            approvalReplayFilterRegistration(
+                    com.starsoft.voint.approval.ApprovalReplayFilter filter) {
+        FilterRegistrationBean<com.starsoft.voint.approval.ApprovalReplayFilter> registration =
+                new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     /** Allows the panel's browser origin(s) to call the API directly (see voint.cors.allowed-origins). */
