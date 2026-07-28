@@ -75,6 +75,21 @@ voint:
     # because nothing else in this backend would ever touch it until a call breaks.
     api-key: ${ELEVENLABS_API_KEY:}
     voice-id: ${ELEVENLABS_VOICE_ID:}
+  smtp:
+    # Outgoing mail: panel logins and password resets. The admin panel can override every one of
+    # these at runtime; what is set here is the fallback the server starts with, so a fresh
+    # database still sends mail instead of falling back to reading passwords out over the phone.
+    # All five must be present - MailService refuses to send on a half-configured server.
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    # Must be an address the SMTP account is allowed to send as, otherwise the server rejects it.
+    from: ${SMTP_FROM:}
+  panel:
+    # Base domain tenant panels live under: texnika.<domain>. Used to build the login link in the
+    # welcome email, so a wrong value here sends customers to an address that does not resolve.
+    domain: ${VOINT_PANEL_DOMAIN:sarkhan.az}
   ai:
     # Folder with prompts + RAG templates (see ai/README.md)
     folder: ${VOINT_AI_FOLDER:./ai}
