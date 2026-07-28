@@ -18,6 +18,7 @@ import com.starsoft.voint.common.exception.NotFoundException;
 import com.starsoft.voint.rbac.dto.PanelUserCreateRequest;
 import com.starsoft.voint.rbac.dto.PanelUserCreatedResponse;
 import com.starsoft.voint.rbac.dto.PanelUserResponse;
+import com.starsoft.voint.rbac.dto.PanelUserUpdateRequest;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -110,6 +111,41 @@ public class PanelUserService {
         return new PanelUserCreatedResponse(
                 PanelUserResponse.from(user, roleName(user.getRoleId())),
                 emailed ? null : password, emailed);
+    }
+
+    /**
+     * Corrects an account's address or name - a typo at onboarding, or someone who changed their
+     * surname. Nothing else moves: the role, the status and the password stay exactly as they were.
+     *
+     * <p>The email IS the login, so changing it logs the person out of any session they have open.
+     * That is correct - the token names an address that no longer exists - but it only actually
+     * happens if the old address is evicted from the permission cache, which is why the eviction
+     * below uses the previous value and not the saved one.
+     */
+    @Transactional
+    public PanelUserResponse update(UUID tenantId, UUID userId, PanelUserUpdateRequest request) {
+        PanelUser user = requireUserOfTenant(tenantId, userId);
+        String previousEmail = user.getEmail();
+        String email = request.email().trim().toLowerCase();
+
+        if (!email.equalsIgnoreCase(previousEmail)
+                && userRepository.existsByEmailIgnoreCase(email)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Bu e-poçt artıq istifadə olunur: " + email);
+        }
+
+        user.setEmail(email);
+        String fullName = request.fullName() != null ? request.fullName().trim() : null;
+        user.setFullName(fullName == null || fullName.isEmpty() ? null : fullName);
+        user = userRepository.save(user);
+
+        permissions.evictUser(previousEmail);
+        permissions.evictUser(user);
+
+        if (!email.equalsIgnoreCase(previousEmail)) {
+            log.info("Panel user {} is now {}", previousEmail, email);
+        }
+        return PanelUserResponse.from(user, roleName(user.getRoleId()));
     }
 
     @Transactional

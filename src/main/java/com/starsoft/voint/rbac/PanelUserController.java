@@ -22,6 +22,7 @@ import com.starsoft.voint.auth.TenantAccessGuard;
 import com.starsoft.voint.rbac.dto.PanelUserCreateRequest;
 import com.starsoft.voint.rbac.dto.PanelUserCreatedResponse;
 import com.starsoft.voint.rbac.dto.PanelUserResponse;
+import com.starsoft.voint.rbac.dto.PanelUserUpdateRequest;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -68,6 +69,16 @@ public class PanelUserController {
                                            @Valid @RequestBody PanelUserCreateRequest request) {
         tenantAccessGuard.requireAccess(tenantId);
         return userService.create(tenantId, request);
+    }
+
+    @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.UPDATE)
+    @PutMapping("/{userId}")
+    @Operation(summary = "Edit the address and name; changing the address changes the login")
+    public PanelUserResponse update(@PathVariable UUID tenantId,
+                                    @PathVariable UUID userId,
+                                    @Valid @RequestBody PanelUserUpdateRequest request) {
+        tenantAccessGuard.requireAccess(tenantId);
+        return userService.update(tenantId, userId, request);
     }
 
     @RequirePermission(resource = Permission.Resource.USER, action = Permission.Action.UPDATE)
