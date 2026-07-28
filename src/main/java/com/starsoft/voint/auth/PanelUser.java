@@ -39,10 +39,29 @@ public class PanelUser {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    /** e.g. ADMIN, OPERATOR. Plain string at bootstrap stage. */
+    /**
+     * Legacy string role. Kept because the JWT and TenantAccessGuard still read it; the real
+     * permissions now live behind {@link #roleId}. Removing it in the same change that
+     * introduces roles would have meant rewriting authentication and authorisation at once.
+     */
     @Column(nullable = false)
     @Builder.Default
     private String role = "ADMIN";
+
+    /** The role whose permission matrix applies to this user. */
+    @Column(name = "role_id")
+    private UUID roleId;
+
+    /** ACTIVE / BLOCKED. Blocking keeps the account and its history; deleting orphans both. */
+    @Column(nullable = false)
+    @Builder.Default
+    private String status = "ACTIVE";
+
+    @Column(name = "full_name")
+    private String fullName;
+
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.starsoft.voint.common.exception.NotFoundException;
 import com.starsoft.voint.provisioning.VapiAssistantProvisioner;
+import com.starsoft.voint.rbac.RoleService;
 import com.starsoft.voint.tenant.dto.TenantConfigUpdateRequest;
 import com.starsoft.voint.tenant.dto.TenantCreateRequest;
 
@@ -25,6 +26,7 @@ public class TenantService {
 
     private final TenantRepository tenantRepository;
     private final VapiAssistantProvisioner provisioner;
+    private final RoleService roleService;
 
     @Transactional
     public Tenant create(TenantCreateRequest request) {
@@ -41,6 +43,12 @@ public class TenantService {
                 .sttVocabulary(request.sttVocabulary())
                 .build();
         tenant = tenantRepository.save(tenant);
+
+        // Its own copy of the owner role, so the first account has something to be assigned.
+        // A copy rather than the shared template: this business may later narrow what its owner
+        // can do, and that must not change every other business on the platform.
+        roleService.createOwnerRoleFor(tenant.getId());
+
         return syncAssistant(tenant);
     }
 
