@@ -3,6 +3,7 @@ package com.starsoft.voint.rbac;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,6 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -27,13 +27,23 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class EndpointCoverageReporter {
+
+    public EndpointCoverageReporter(
+            @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping handlerMapping) {
+        this.handlerMapping = handlerMapping;
+    }
 
     /** Infrastructure Spring registers itself; not ours to annotate. */
     private static final List<String> IGNORED_PACKAGES = List.of(
             "org.springframework", "org.springdoc");
 
+    /**
+     * Qualified by name: actuator registers a second RequestMappingHandlerMapping
+     * (controllerEndpointHandlerMapping), so an unqualified injection is ambiguous and the whole
+     * application refuses to start. We want the MVC one - actuator's endpoints are not ours to
+     * annotate anyway.
+     */
     private final RequestMappingHandlerMapping handlerMapping;
 
     @EventListener(ApplicationReadyEvent.class)
