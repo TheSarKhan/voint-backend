@@ -67,8 +67,27 @@ public class MailService {
             sender.send(message);
             log.info("Sent '{}' to {}", subject, to);
         } catch (Exception e) {
-            throw new MailException("E-poçt göndərilmədi: " + e.getMessage(), e);
+            throw new MailException("E-poçt göndərilmədi: " + explain(e), e);
         }
+    }
+
+    /**
+     * Spring's own message is only ever "Authentication failed" or "Mail server connection failed";
+     * the sentence that tells you what to actually do - Google's "535 5.7.8 Username and Password
+     * not accepted", a blocked port, a rejected sender - sits further down the cause chain. Walking
+     * it is the difference between an operator fixing the app password and one filing a bug on us.
+     */
+    private String explain(Throwable e) {
+        Throwable root = e;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String outer = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        String inner = root.getMessage();
+        if (inner == null || inner.isBlank() || outer.contains(inner)) {
+            return outer;
+        }
+        return outer + " - " + inner.replace('\n', ' ').trim();
     }
 
     /**
