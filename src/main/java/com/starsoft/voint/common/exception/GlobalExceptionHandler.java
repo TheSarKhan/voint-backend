@@ -5,6 +5,7 @@ import java.net.URI;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -121,6 +122,18 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleNoHandler(Exception ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Belə ünvan yoxdur");
         pd.setTitle("Not found");
+        return pd;
+    }
+
+    /**
+     * The address exists but not with that verb. Without this the catch-all answers 500, which
+     * sends the caller looking for a server fault instead of at the verb they used.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ProblemDetail handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.METHOD_NOT_ALLOWED,
+                "Bu ünvanda " + ex.getMethod() + " əməliyyatı yoxdur");
+        pd.setTitle("Method not allowed");
         return pd;
     }
 
