@@ -9,6 +9,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.starsoft.voint.provisioning.VapiAssistantProvisioner;
 import com.starsoft.voint.settings.VapiSyncService;
@@ -86,6 +88,17 @@ public class GlobalExceptionHandler {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
         pd.setTitle("Provider unavailable");
         pd.setType(URI.create("https://voint.starsoft.com/errors/upstream"));
+        return pd;
+    }
+
+    /**
+     * A path nobody mapped is a 404, not a server error. Without this the catch-all below turns
+     * every typo into a 500, which reads as "we are broken" instead of "that does not exist".
+     */
+    @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
+    public ProblemDetail handleNoHandler(Exception ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, "Belə ünvan yoxdur");
+        pd.setTitle("Not found");
         return pd;
     }
 

@@ -100,7 +100,14 @@ public class PermissionInterceptor implements HandlerInterceptor {
         if (!(vars instanceof Map<?, ?> map)) {
             return;
         }
+        // Bes controller yol deyisenini "id" adlandirir (/api/v1/tenants/{id}/calls), biri ise
+        // "tenantId". Yalniz birine baxsaq, mudafienin bu qati onlarin yarisinda islemez —
+        // controller-in icindeki requireAccess hele de qoruyur, amma yeni endpoint onu unudarsa
+        // hec ne qalmir.
         Object raw = map.get("tenantId");
+        if (raw == null && request.getRequestURI().startsWith("/api/v1/tenants/")) {
+            raw = map.get("id");
+        }
         if (raw == null) {
             return;
         }
