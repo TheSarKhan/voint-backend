@@ -67,6 +67,14 @@ voint:
     # Optional pins - leave empty to auto-discover a "flash" / "embedding" model via ListModels.
     model: ${GEMINI_MODEL:}
     embedding-model: ${GEMINI_EMBEDDING_MODEL:}
+    # Gemini 2.5 Flash thinks before it answers, and that happens BEFORE the first token - on a
+    # phone call it is silence the caller sits through. Measured at ~1.2-1.5s of the ~1.9s our
+    # backend took to produce a first word. 0 turns it off; raise it only if answer quality on a
+    # real call demands it, and measure the cost in milliseconds when you do.
+    thinking-budget: ${GEMINI_THINKING_BUDGET:0}
+    # A spoken turn is a few sentences. A generation longer than this cannot be said out loud
+    # anyway - it just holds the line open while the model keeps writing.
+    max-output-tokens: ${GEMINI_MAX_OUTPUT_TOKENS:400}
   soniox:
     api-key: ${SONIOX_API_KEY:}
   elevenlabs:
