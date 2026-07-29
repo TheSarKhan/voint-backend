@@ -102,10 +102,29 @@ public class SecurityConfig {
         return registration;
     }
 
-    /** Allows the panel's browser origin(s) to call the API directly (see voint.cors.allowed-origins). */
+    /**
+     * Which browser origins may call this API (see voint.cors.allowed-origins).
+     *
+     * <p>Patterns, not exact origins, and that is the whole point: every business gets its own
+     * address - texnika.sarkhan.az, klinika.sarkhan.az - so an exact list would have to be edited
+     * and the server restarted each time a customer is onboarded. One entry of the form
+     * {@code https://*.sarkhan.az} covers all of them.
+     *
+     * <p>This bites even though each panel calls its OWN origin. Since Spring Framework 5.3 a
+     * request counts as CORS whenever an Origin header is present, and browsers attach Origin to
+     * same-origin POST, PUT and DELETE. So a panel on an unlisted subdomain could read (GET carries
+     * no Origin) but every write, sign-in included, came back 403 "Invalid CORS request".
+     *
+     * <p>setAllowedOriginPatterns rather than setAllowedOrigins: the latter rejects wildcards
+     * outright when credentials are allowed, which they are.
+     */
     private CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(allowedOrigins.split(",")));
+        config.setAllowedOriginPatterns(
+                java.util.Arrays.stream(allowedOrigins.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
