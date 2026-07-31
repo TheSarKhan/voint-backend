@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.starsoft.voint.auth.TenantAccessGuard;
+import com.starsoft.voint.rbac.Permission;
+import com.starsoft.voint.rbac.RequirePermission;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -21,6 +23,12 @@ public class QuestionAdminController {
     private final CallAnalysisBackfillService backfillService;
     private final TenantAccessGuard tenantAccessGuard;
 
+    // requireSuperAdmin() tək başına bəs edərdi, amma o zaman EndpointCoverageReporter bu
+    // endpoint-i "heç bir icazə tələb etmir" deyə sadalayır - və o siyahı yalnız BOŞ olanda
+    // faydalıdır. Bir dəfə "bunu bilirəm, narahat olma" deyilən sətir siyahını sonsuza qədər
+    // gürültüyə çevirir. tenantScoped=false: platforma səviyyəsində iş, bir müəssisəyə aid deyil.
+    @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.UPDATE,
+            tenantScoped = false)
     @PostMapping("/api/v1/admin/questions/backfill")
     @Operation(summary = "Analyse calls recorded before the analysis existed (platform staff only)")
     public Map<String, Integer> backfill(@RequestParam(defaultValue = "25") int limit) {
