@@ -41,4 +41,12 @@ public class CallTranscript {
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();
+
+    /**
+     * Cavabsız sual təhlilinin işlədiyi an. NULL = hələ baxılmayıb (köhnə zənglər, və ya Gemini
+     * əlçatmaz olduğu üçün buraxılanlar) — geriyə dönük doldurma məhz bunları götürür.
+     * Sual tapılmayan zəngdə də dolur: "boşluq yoxdur" ilə "baxılmayıb" eyni şey deyil.
+     */
+    @Column(name = "analyzed_at")
+    private Instant analyzedAt;
 }

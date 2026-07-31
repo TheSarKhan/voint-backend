@@ -113,6 +113,7 @@ public class GeminiApiClient {
         return new GenerationConfig(
                 new ThinkingConfig(thinkingBudget),
                 maxOutputTokens > 0 ? maxOutputTokens : null,
+                null,
                 null);
     }
 
@@ -134,10 +135,33 @@ public class GeminiApiClient {
     }
 
     /**
+     * Off-call generation: JSON out, room to think, no 400-token speech budget.
+     *
+     * <p>The voice settings are wrong for anything that is not spoken. {@code maxOutputTokens} is
+     * capped at what a person can listen to, and thinking is switched off because on a phone call
+     * deliberation is audible as silence - neither constraint applies when nobody is holding a
+     * receiver. Asking for {@code application/json} matters just as much: without it Gemini wraps
+     * the object in prose and a code fence, and the parser then fails on output that was correct.
+     *
+     * @param maxOutputTokens hard ceiling for this call
+     * @param thinkingBudget  0 keeps it cheap; raise it for analysis that genuinely needs reasoning
+     */
+    public GenerationResult generateJson(String systemPrompt, String userMessage,
+                                         int maxOutputTokens, int thinkingBudget) {
+        return generate(systemPrompt, userMessage,
+                new GenerationConfig(new ThinkingConfig(thinkingBudget), maxOutputTokens, null,
+                        "application/json"));
+    }
+
+    /**
      * Calls Gemini {@code generateContent}. Throws {@link GeminiApiException} on any failure -
      * callers (voice pipeline) must catch and fall back to a safe canned response.
      */
     public GenerationResult generateContent(String systemPrompt, String userMessage) {
+        return generate(systemPrompt, userMessage, voiceGenerationConfig());
+    }
+
+    private GenerationResult generate(String systemPrompt, String userMessage, GenerationConfig config) {
         if (!isConfigured()) {
             throw new GeminiApiException("Gemini API key is not configured");
         }
@@ -149,7 +173,7 @@ public class GeminiApiClient {
             GenerateContentRequest body = new GenerateContentRequest(
                     List.of(new Content("user", List.of(new Part(userMessage)))),
                     StringUtils.hasText(systemPrompt) ? new SystemInstruction(List.of(new Part(systemPrompt))) : null,
-                    voiceGenerationConfig());
+                    config);
 
             GenerateContentResponse resp = restClient.post()
                     .uri(b -> b.path("/v1beta/" + chatModel + ":generateContent").queryParam("key", apiKey()).build())
@@ -421,11 +445,15 @@ public class GeminiApiClient {
     private record ThinkingConfig(int thinkingBudget) {
     }
 
+    @com.fasterxml.jackson.annotation.JsonInclude(
+            com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     private record GenerationConfig(
             ThinkingConfig thinkingConfig,
             /** A runaway generation cannot be spoken anyway; it just holds the line open. */
             Integer maxOutputTokens,
-            Double temperature) {
+            Double temperature,
+            /** "application/json" makes Gemini return parseable JSON instead of prose with a code fence. */
+            String responseMimeType) {
     }
 
     @com.fasterxml.jackson.annotation.JsonInclude(

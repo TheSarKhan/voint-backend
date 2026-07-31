@@ -5,7 +5,10 @@ import java.util.UUID;
 
 import com.starsoft.voint.call.Call;
 import com.starsoft.voint.call.CallStatus;
+import java.util.List;
+
 import com.starsoft.voint.crm.CallTranscript;
+import com.starsoft.voint.question.dto.UnansweredQuestionResponse;
 
 /**
  * Single-call view used by GET /tenants/{id}/calls/{callId}.
@@ -23,12 +26,16 @@ public record CallDetailResponse(
         Instant startedAt,
         Instant endedAt,
         String fullTranscript,
-        String aiSummary
+        String aiSummary,
+        /** Zəngdən sonrakı təhlilin tapdığı, agentin cavablaya bilmədiyi suallar. */
+        List<UnansweredQuestionResponse> unansweredQuestions
 ) {
-    public static CallDetailResponse from(Call c, CallTranscript transcript) {
+    public static CallDetailResponse from(Call c, CallTranscript transcript,
+                                          List<UnansweredQuestionResponse> unansweredQuestions) {
         return new CallDetailResponse(c.getId(), c.getTenantId(), c.getCallerNumber(), c.getLanguageDetected(),
                 c.getStatus(), c.getDurationSeconds(), c.getStartedAt(), c.getEndedAt(),
                 transcript != null ? transcript.getFullTranscript() : null,
-                transcript != null ? transcript.getAiSummary() : null);
+                transcript != null ? transcript.getAiSummary() : null,
+                unansweredQuestions);
     }
 }

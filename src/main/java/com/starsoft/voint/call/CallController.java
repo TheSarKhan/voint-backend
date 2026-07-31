@@ -15,7 +15,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 import com.starsoft.voint.auth.TenantAccessGuard;
+import com.starsoft.voint.question.UnansweredQuestionService;
+import com.starsoft.voint.question.dto.UnansweredQuestionResponse;
 import com.starsoft.voint.call.dto.CallCreateRequest;
 import com.starsoft.voint.call.dto.CallDetailResponse;
 import com.starsoft.voint.call.dto.CallResponse;
@@ -31,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 public class CallController {
 
     private final CallService callService;
+    private final UnansweredQuestionService questionService;
     private final TenantAccessGuard tenantAccessGuard;
 
     @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)
@@ -38,7 +43,11 @@ public class CallController {
     @Operation(summary = "List calls of the tenant")
     public List<CallResponse> list(@PathVariable("id") UUID tenantId) {
         tenantAccessGuard.requireAccess(tenantId);
-        return callService.list(tenantId).stream().map(CallResponse::from).toList();
+        // Bir qruplaşdırma sorğusu - zəng başına ayrıca saymaq 27 zəngdə 27 sorğu deməkdir.
+        Map<UUID, Long> openCounts = questionService.openCountByCall(tenantId);
+        return callService.list(tenantId).stream()
+                .map(c -> CallResponse.from(c, openCounts.getOrDefault(c.getId(), 0L)))
+                .toList();
     }
 
     @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)
@@ -47,7 +56,10 @@ public class CallController {
     public CallDetailResponse get(@PathVariable("id") UUID tenantId, @PathVariable UUID callId) {
         tenantAccessGuard.requireAccess(tenantId);
         Call call = callService.get(tenantId, callId);
-        return CallDetailResponse.from(call, callService.getTranscript(call.getId()));
+        List<UnansweredQuestionResponse> questions = questionService.listByCall(call.getId()).stream()
+                .map(UnansweredQuestionResponse::from)
+                .toList();
+        return CallDetailResponse.from(call, callService.getTranscript(call.getId()), questions);
     }
 
     @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)

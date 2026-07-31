@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.starsoft.voint.call.Call;
@@ -13,6 +15,7 @@ import com.starsoft.voint.call.CallRepository;
 import com.starsoft.voint.call.CallStatus;
 import com.starsoft.voint.crm.CallTranscript;
 import com.starsoft.voint.crm.CallTranscriptRepository;
+import com.starsoft.voint.question.CallAnalysisService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +38,7 @@ public class VapiEventService {
 
     private final CallRepository callRepository;
     private final CallTranscriptRepository callTranscriptRepository;
+    private final CallAnalysisService callAnalysisService;
 
     @Transactional
     public void handle(JsonNode body) {
@@ -86,6 +90,32 @@ public class VapiEventService {
 
         log.info("Recorded end-of-call-report: call {} (tenant {}, caller {}, {}s, reason={})",
                 call.getId(), tenantId, callerNumber, call.getDurationSeconds(), endedReason);
+
+        scheduleAnalysis(tenantId, call.getId(), transcript);
+    }
+
+    /**
+     * Hands the call to the unanswered-question analysis - but only AFTER this transaction commits.
+     *
+     * <p>The analysis runs on another thread and reads the call row back. Starting it before the
+     * commit is a race it loses: the row is not visible outside this transaction yet, so the
+     * analysis would write questions pointing at a call that, from its side, does not exist. And
+     * if the transaction then rolled back, we would have analysed a call that never happened.
+     */
+    private void scheduleAnalysis(UUID tenantId, UUID callId, String transcript) {
+        if (transcript == null || transcript.isBlank()) {
+            return;
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    callAnalysisService.analyzeAsync(tenantId, callId, transcript);
+                }
+            });
+        } else {
+            callAnalysisService.analyzeAsync(tenantId, callId, transcript);
+        }
     }
 
     /**
