@@ -34,7 +34,7 @@ public class RagController {
     private final RagService ragService;
     private final TenantAccessGuard tenantAccessGuard;
 
-    @RequirePermission(resource = Permission.Resource.RAG, action = Permission.Action.READ)
+    @RequirePermission(resource = Permission.Resource.RAG, action = Permission.Action.CREATE)
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Add a RAG document for the tenant (embedding computed in a later stage)")
@@ -52,7 +52,7 @@ public class RagController {
         return ragService.list(tenantId).stream().map(RagDocumentResponse::from).toList();
     }
 
-    @RequirePermission(resource = Permission.Resource.RAG, action = Permission.Action.READ)
+    @RequirePermission(resource = Permission.Resource.RAG, action = Permission.Action.DELETE)
     @DeleteMapping("/{docId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete a RAG document")

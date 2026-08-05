@@ -49,7 +49,12 @@ public class LeadController {
     private final LeadRateLimiter rateLimiter;
     private final TenantAccessGuard tenantAccessGuard;
 
-    @RequirePermission(resource = Permission.Resource.LEAD, action = Permission.Action.READ, tenantScoped = false)
+    // Landing sehifesindeki pilot formu bura yazir - gonderen adam hele musteri deyil, hesabi da
+    // yoxdur. Evvel burada @RequirePermission(LEAD, READ) dururdu: Spring Security /api/v1/public/**
+    // yolunu acir, amma PermissionInterceptor autentifikasiya olunmus istifadeci teleb edir, ona gore
+    // HER gonderis 401 alirdi - forma sinmisdi ve bunu goren olmurdu, cunki xeta brauzerde qalirdi.
+    // Sui-istifadeni icaze yox, LeadRateLimiter saxlayir (IP uzre).
+    @PublicEndpoint("Landing pilot formu - gonderen hele hesab sahibi deyil")
     @PostMapping("/api/v1/public/leads")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Submit a pilot request (public, rate limited)")
@@ -86,7 +91,7 @@ public class LeadController {
         return Map.of("newCount", leadService.countNew());
     }
 
-    @RequirePermission(resource = Permission.Resource.LEAD, action = Permission.Action.READ, tenantScoped = false)
+    @RequirePermission(resource = Permission.Resource.LEAD, action = Permission.Action.UPDATE, tenantScoped = false)
     @PatchMapping("/api/v1/admin/leads/{id}")
     @Operation(summary = "Update the status or note of a pilot request (SUPER_ADMIN only)")
     public LeadResponse update(@PathVariable UUID id,

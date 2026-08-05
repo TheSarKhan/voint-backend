@@ -62,7 +62,7 @@ public class CallController {
         return CallDetailResponse.from(call, callService.getTranscript(call.getId()), questions);
     }
 
-    @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)
+    @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.CREATE)
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a call record manually (testing; later fed by Vapi call events)")

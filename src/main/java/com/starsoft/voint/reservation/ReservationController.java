@@ -39,7 +39,7 @@ public class ReservationController {
         return reservationService.list(tenantId).stream().map(ReservationResponse::from).toList();
     }
 
-    @RequirePermission(resource = Permission.Resource.RESERVATION, action = Permission.Action.READ)
+    @RequirePermission(resource = Permission.Resource.RESERVATION, action = Permission.Action.UPDATE)
     @PatchMapping("/{resId}")
     @Operation(summary = "Confirm or reject a reservation request")
     public ReservationResponse update(@PathVariable("id") UUID tenantId,
