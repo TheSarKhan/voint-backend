@@ -94,6 +94,11 @@ voint:
     password: ${SMTP_PASSWORD:}
     # Must be an address the SMTP account is allowed to send as, otherwise the server rejects it.
     from: ${SMTP_FROM:}
+  # Address Vapi calls back on. It ends up inside every provisioned assistant as the custom-LLM
+  # url and the server url, so it is the one setting that decides whether a phone call reaches
+  # this backend at all. Changing it is not enough on its own - the assistants already in Vapi
+  # keep the old address until POST /api/v1/tenants/vapi-sync-all rewrites them.
+  public-base-url: ${VOINT_PUBLIC_BASE_URL:https://voint.sarkhan.az}
   panel:
     # Base domain tenant panels live under: texnika.<domain>. Used to build the login link in the
     # welcome email, so a wrong value here sends customers to an address that does not resolve.
