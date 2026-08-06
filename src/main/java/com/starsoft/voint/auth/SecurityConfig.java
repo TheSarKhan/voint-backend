@@ -56,6 +56,11 @@ public class SecurityConfig {
                                 // oldugunu bilmese, giris ekraninda adini yaza bilmez.
                                 "/api/v1/public/**",
                                 "/api/v1/auth/refresh",
+                                // Şifrəni unudan istifadəçi hələ giriş edə bilmir - bu iki yol
+                                // @PublicEndpoint-dir, amma Spring Security @RequestMapping-dən
+                                // ƏVVƏL işləyir, ona görə burada da açıq elan olunmalıdır.
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/reset-password",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
