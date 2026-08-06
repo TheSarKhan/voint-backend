@@ -50,6 +50,7 @@ public class PanelUserService {
     private final com.starsoft.voint.mail.MailService mail;
     private final com.starsoft.voint.tenant.TenantRepository tenantRepository;
     private final com.starsoft.voint.settings.PlatformSettingsService settings;
+    private final com.starsoft.voint.settings.PanelUrls panelUrls;
 
     @Transactional(readOnly = true)
     public List<PanelUserResponse> listForTenant(UUID tenantId) {
@@ -220,16 +221,9 @@ public class PanelUserService {
 
     /** The tenant's own address when it has a subdomain, otherwise the shared panel. */
     private String panelUrl(UUID tenantId) {
-        String domain = settings.get(
-                com.starsoft.voint.settings.SettingKey.PANEL_DOMAIN);
-        if (tenantId == null) {
-            return "https://voint-admin." + domain;
-        }
-        return tenantRepository.findById(tenantId)
-                .map(com.starsoft.voint.tenant.Tenant::getSubdomain)
-                .filter(sub -> sub != null && !sub.isBlank())
-                .map(sub -> "https://" + sub + "." + domain)
-                .orElse("https://voint." + domain);
+        // Domen məntiqi PanelUrls-ə köçürüldü (əvvəl burada voint-admin./voint. hardcode idi
+        // və domen dəyişəndə qırıldı).
+        return panelUrls.forTenant(tenantId);
     }
 
     // ---------------------------------------------------------------- helpers

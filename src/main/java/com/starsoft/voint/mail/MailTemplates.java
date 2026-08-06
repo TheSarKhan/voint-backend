@@ -75,6 +75,30 @@ public final class MailTemplates {
         return WRAP.formatted(body);
     }
 
+    /**
+     * "Şifrəmi unutdum" linki. {@link #passwordReset}-dən fərqi: burada şifrə YOXDUR — istifadəçi
+     * linki açıb özü yeni şifrə təyin edir. Ona görə e-poçtda heç bir sirr getmir, sadəcə token
+     * daşıyan bir ünvan. Bu mesajı sifariş etməyən biri sadəcə onu iqnor edə bilər: şifrəsi
+     * dəyişmir.
+     */
+    public static String passwordResetLink(String resetUrl) {
+        String body = """
+                <p style="font-size:16px;line-height:1.6;margin:0 0 16px">
+                  Şifrənizi sıfırlamaq üçün sorğu aldıq.
+                </p>
+                <p style="font-size:15px;line-height:1.6;color:#444;margin:0 0 20px">
+                  Yeni şifrə təyin etmək üçün aşağıdakı düyməyə basın. Link bir saat ərzində
+                  keçərlidir. Bu sorğunu siz göndərməmisinizsə, bu mesajı nəzərə almayın —
+                  şifrəniz dəyişməyəcək.
+                </p>
+                <a href="%s" style="display:inline-block;background:#111;color:#fff;
+                   text-decoration:none;padding:11px 20px;border-radius:6px;font-size:14px">
+                  Yeni şifrə təyin et
+                </a>
+                """.formatted(resetUrl);
+        return WRAP.formatted(body);
+    }
+
     public static String test() {
         String body = """
                 <p style="font-size:16px;line-height:1.6;margin:0">

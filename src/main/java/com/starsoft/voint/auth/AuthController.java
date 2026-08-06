@@ -9,12 +9,20 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.starsoft.voint.auth.dto.LoginRequest;
 import com.starsoft.voint.auth.dto.MeResponse;
 import com.starsoft.voint.auth.dto.RefreshRequest;
 import com.starsoft.voint.auth.dto.TokenResponse;
+import com.starsoft.voint.passwordreset.PasswordResetRateLimiter;
+import com.starsoft.voint.passwordreset.PasswordResetService;
+import com.starsoft.voint.passwordreset.dto.ForgotPasswordRequest;
+import com.starsoft.voint.passwordreset.dto.ResetPasswordRequest;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -29,6 +37,8 @@ import lombok.RequiredArgsConstructor;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
+    private final PasswordResetRateLimiter resetRateLimiter;
 
     @PublicEndpoint("Giris")
     @PostMapping("/login")
@@ -49,5 +59,38 @@ public class AuthController {
     @Operation(summary = "Current authenticated panel user", security = @SecurityRequirement(name = "bearerAuth"))
     public MeResponse me(Principal principal) {
         return MeResponse.from(authService.getByEmail(principal.getName()));
+    }
+
+    /**
+     * "Şifrəmi unutdum" — e-poçtla sıfırlama linki göndərir. Cavab həmişə 202-dir: e-poçtun
+     * qeydiyyatda olub-olmaması AÇIQLANMIR (bax PasswordResetService).
+     */
+    @PublicEndpoint("Sifremi unutdum - reset linki gonderir")
+    @PostMapping("/forgot-password")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    @Operation(summary = "Request a password reset link by email")
+    public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request,
+                               HttpServletRequest http) {
+        if (!resetRateLimiter.tryAcquire(clientIp(http))) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Çox sayda sorğu göndərilib. Bir qədər sonra yenidən cəhd edin.");
+        }
+        passwordResetService.requestReset(request.email());
+    }
+
+    /** Linkdəki token + yeni şifrə. Uğurlu olsa köhnə şifrə işləməyi dayandırır. */
+    @PublicEndpoint("Reset token ile yeni sifre teyin etmek")
+    @PostMapping("/reset-password")
+    @Operation(summary = "Set a new password using a reset token")
+    public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        passwordResetService.reset(request.token(), request.newPassword());
+    }
+
+    private String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }
