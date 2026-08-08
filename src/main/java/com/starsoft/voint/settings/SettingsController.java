@@ -123,6 +123,26 @@ public class SettingsController {
         return list();
     }
 
+    /**
+     * The one deliberate hole in "secrets are fingerprinted, not shown" - an operator sometimes
+     * genuinely needs the plaintext (to paste into another tool, or confirm prod and local match).
+     * Kept narrow: SUPER_ADMIN only, and every reveal is logged so there is a trail of who saw what,
+     * when.
+     */
+    @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.READ, tenantScoped = false)
+    @GetMapping("/api/v1/admin/settings/{key}/reveal")
+    @Operation(summary = "Full plaintext value of a credential (SUPER_ADMIN only, logged)")
+    public Map<String, String> reveal(@PathVariable String key) {
+        tenantAccessGuard.requireSuperAdmin();
+        SettingKey settingKey = parse(key);
+        String value = settings.get(settingKey);
+        if (value.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Bu ayar hələ təyin olunmayıb");
+        }
+        log.warn("Provider credential '{}' revealed by {}", settingKey.getKey(), currentUserEmail());
+        return Map.of("value", value);
+    }
+
     @RequirePermission(resource = Permission.Resource.PROVIDER, action = Permission.Action.UPDATE, tenantScoped = false)
     @DeleteMapping("/api/v1/admin/settings/{key}")
     @Operation(summary = "Fall a credential back to the server configuration (SUPER_ADMIN only)")
