@@ -3,6 +3,7 @@ package com.starsoft.voint.rbac;
 import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -52,9 +53,10 @@ public class PanelUserService {
     private final com.starsoft.voint.settings.PlatformSettingsService settings;
     private final com.starsoft.voint.settings.PanelUrls panelUrls;
 
+    /** @param tenantId null lists platform staff - the accounts not tied to any business. */
     @Transactional(readOnly = true)
     public List<PanelUserResponse> listForTenant(UUID tenantId) {
-        List<PanelUser> users = userRepository.findByTenantIdOrderByCreatedAt(tenantId);
+        List<PanelUser> users = usersOf(tenantId);
         Map<UUID, String> roleNames = roleNamesFor(users);
         return users.stream()
                 .map(u -> PanelUserResponse.from(u, roleNames.get(u.getRoleId())))
@@ -155,6 +157,23 @@ public class PanelUserService {
             throw new IllegalArgumentException("status yalnız ACTIVE və ya BLOCKED ola bilər");
         }
         PanelUser user = requireUserOfTenant(tenantId, userId);
+
+        if ("BLOCKED".equals(status) && "ACTIVE".equals(user.getStatus())) {
+            // Same lockout risk as delete() - blocking the last active user leaves nobody a way in.
+            long remaining = usersOf(tenantId).stream()
+                    .filter(u -> !u.getId().equals(userId))
+                    .filter(u -> "ACTIVE".equals(u.getStatus()))
+                    .count();
+            if (remaining == 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        tenantId == null
+                                ? "Bu, platformanın son aktiv istifadəçisidir - bloklansa admin panelə "
+                                        + "giriş qalmır. Əvvəlcə başqa istifadəçi yarat."
+                                : "Bu, müəssisənin son aktiv istifadəçisidir - bloklansa panelə giriş "
+                                        + "qalmır. Əvvəlcə başqa istifadəçi yarat.");
+            }
+        }
+
         user.setStatus(status);
         user = userRepository.save(user);
         // Blocking has to take effect on the next request, not when the token happens to expire.
@@ -176,15 +195,19 @@ public class PanelUserService {
     public void delete(UUID tenantId, UUID userId) {
         PanelUser user = requireUserOfTenant(tenantId, userId);
 
-        // Leaving a business with no way in is a support call waiting to happen.
-        long remaining = userRepository.findByTenantIdOrderByCreatedAt(tenantId).stream()
+        // Leaving a business - or the platform itself - with no way in is a support call
+        // waiting to happen.
+        long remaining = usersOf(tenantId).stream()
                 .filter(u -> !u.getId().equals(userId))
                 .filter(u -> "ACTIVE".equals(u.getStatus()))
                 .count();
         if (remaining == 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Bu, müəssisənin son aktiv istifadəçisidir - silinsə panelə giriş qalmır. "
-                            + "Əvvəlcə başqa istifadəçi yarat.");
+                    tenantId == null
+                            ? "Bu, platformanın son aktiv istifadəçisidir - silinsə admin panelə giriş "
+                                    + "qalmır. Əvvəlcə başqa istifadəçi yarat."
+                            : "Bu, müəssisənin son aktiv istifadəçisidir - silinsə panelə giriş qalmır. "
+                                    + "Əvvəlcə başqa istifadəçi yarat.");
         }
 
         userRepository.delete(user);
@@ -228,12 +251,28 @@ public class PanelUserService {
 
     // ---------------------------------------------------------------- helpers
 
+    /**
+     * @param tenantId null for platform staff. Uses the dedicated {@code IsNull} query rather
+     *                 than relying on Spring Data's null-parameter-becomes-IS-NULL behaviour for
+     *                 the plain derived query - it works either way, but the intent should be
+     *                 obvious to the next person reading this, not dependent on knowing that quirk.
+     */
+    private List<PanelUser> usersOf(UUID tenantId) {
+        return tenantId == null
+                ? userRepository.findByTenantIdIsNullOrderByCreatedAt()
+                : userRepository.findByTenantIdOrderByCreatedAt(tenantId);
+    }
+
     private PanelUser requireUserOfTenant(UUID tenantId, UUID userId) {
         PanelUser user = userRepository.findById(userId)
                 .orElseThrow(() -> NotFoundException.of("İstifadəçi", userId));
-        // The path says which tenant; the record has to agree, or one business could act on
-        // another's accounts by guessing an id.
-        if (tenantId != null && !tenantId.equals(user.getTenantId())) {
+        // The caller says which tenant (null = platform); the record has to agree, or one
+        // business could act on another's accounts by guessing an id - and, since this is now
+        // reachable with tenantId == null from the platform-only user controller, a platform
+        // caller must not be able to reach into a TENANT's account just because "tenantId != null"
+        // used to skip the check entirely. Objects.equals treats null == null as a match, which
+        // is exactly "this account is platform staff too".
+        if (!Objects.equals(tenantId, user.getTenantId())) {
             throw NotFoundException.of("İstifadəçi", userId);
         }
         return user;
