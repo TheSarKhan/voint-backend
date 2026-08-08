@@ -49,7 +49,7 @@ public class DashboardService {
      *  a platform trend is read weekly, not daily, so a month of context reads better than a week. */
     private static final int TREND_DAYS = 30;
 
-    private static final int TOP_TENANTS = 5;
+    private static final int TOP_TENANTS = 10;
     private static final int RECENT_CALLS = 10;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 

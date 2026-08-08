@@ -30,7 +30,7 @@ public record DashboardResponse(
         /** Most recent calls across every tenant, newest first. */
         List<RecentCall> recentCalls,
         /**
-         * Top 5 by this month's invoice, biggest first. Not every tenant - the full, sortable list
+         * Top 10 by this month's invoice, biggest first. Not every tenant - the full, sortable list
          * already lives on the Hesablaşma (Usage) page; this is a "what needs a look today" digest,
          * not a replacement for it.
          */
