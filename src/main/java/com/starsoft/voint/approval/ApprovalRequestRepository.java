@@ -14,6 +14,9 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
 
     long countByTenantIdAndStatus(UUID tenantId, String status);
 
+    /** Platform-wide, for the admin dashboard - how many businesses have something waiting on us. */
+    long countByStatus(String status);
+
     /** The replay presents its one-shot secret; nothing else identifies it. */
     Optional<ApprovalRequest> findByReplayNonce(String replayNonce);
 }

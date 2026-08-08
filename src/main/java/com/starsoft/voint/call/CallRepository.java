@@ -21,6 +21,19 @@ public interface CallRepository extends JpaRepository<Call, UUID> {
 
     long countByTenantIdAndCallerNumber(UUID tenantId, String callerNumber);
 
+    /** Platform-wide count in a half-open window - "how many calls today/this month, across every tenant". */
+    long countByStartedAtBetween(Instant from, Instant to);
+
+    /**
+     * Platform-wide, bounded to a window rather than {@code findAll()} - a trend chart needs the
+     * last 30 days, not the full history, and pulling everything ever called would only get worse
+     * as the platform grows.
+     */
+    List<Call> findByStartedAtAfterOrderByStartedAtDesc(Instant after);
+
+    /** Most recent calls across every tenant, for a platform activity feed. */
+    List<Call> findTop10ByOrderByStartedAtDesc();
+
     @Query("select avg(c.durationSeconds) from Call c where c.tenantId = :tenantId and c.durationSeconds is not null")
     Double averageDurationSeconds(@Param("tenantId") UUID tenantId);
 

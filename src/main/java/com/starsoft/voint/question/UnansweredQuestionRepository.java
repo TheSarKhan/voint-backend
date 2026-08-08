@@ -18,6 +18,9 @@ public interface UnansweredQuestionRepository extends JpaRepository<UnansweredQu
 
     Optional<UnansweredQuestion> findByIdAndTenantId(UUID id, UUID tenantId);
 
+    /** Platform-wide, for the admin dashboard - how many knowledge-base gaps are open right now. */
+    long countByStatus(QuestionStatus status);
+
     /**
      * Zəng siyahısında işarələmə üçün: hansı zənglərdə neçə AÇIQ sual var.
      * Zəng başına ayrıca sorğu vermək N+1 deməkdir — siyahı 27 zəngdə 27 sorğu.
