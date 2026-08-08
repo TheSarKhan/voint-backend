@@ -1,9 +1,11 @@
 package com.starsoft.voint.auth;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.starsoft.voint.auth.dto.LoginRequest;
 import com.starsoft.voint.auth.dto.RefreshRequest;
@@ -28,6 +30,7 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new BadCredentialsException("Invalid email or password");
         }
+        requireActive(user);
         return TokenResponse.bearer(
                 jwtService.generateAccessToken(user),
                 jwtService.generateRefreshToken(user));
@@ -46,9 +49,21 @@ public class AuthService {
         }
         PanelUser user = panelUserRepository.findByEmail(claims.getSubject())
                 .orElseThrow(() -> new BadCredentialsException("User no longer exists"));
+        requireActive(user);
         return TokenResponse.bearer(
                 jwtService.generateAccessToken(user),
                 jwtService.generateRefreshToken(user));
+    }
+
+    /**
+     * Blocking has to bite on the next login/refresh too, not just on API calls the
+     * {@code PermissionInterceptor} happens to guard - otherwise a blocked account keeps minting
+     * fresh tokens for as long as its refresh token lives.
+     */
+    private void requireActive(PanelUser user) {
+        if ("BLOCKED".equals(user.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Hesabınız bloklanıb");
+        }
     }
 
     @Transactional(readOnly = true)
