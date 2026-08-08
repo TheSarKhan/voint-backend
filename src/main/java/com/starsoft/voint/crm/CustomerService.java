@@ -1,5 +1,6 @@
 package com.starsoft.voint.crm;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +18,28 @@ import lombok.RequiredArgsConstructor;
 public class CustomerService {
 
     private final CustomerRepository customerRepository;
+
+    /**
+     * Bir zəng bitəndə çağırılır: bu nömrə üçün artıq kart varsa "son görülmə"nü təzələyir, yoxdursa
+     * yenisini açır. {@code callCount} ayrıca yazılmır — {@link CustomerController} onu hər dəfə
+     * {@code calls} cədvəlindən nömrə üzrə sayır, ona görə bir kartın açılması kifayətdir.
+     */
+    @Transactional
+    public Customer findOrCreateByPhone(UUID tenantId, String phoneNumber) {
+        String normalized = phoneNumber.trim();
+        Instant now = Instant.now();
+        return customerRepository.findByTenantIdAndPhoneNumber(tenantId, normalized)
+                .map(existing -> {
+                    existing.setLastSeenAt(now);
+                    return customerRepository.save(existing);
+                })
+                .orElseGet(() -> customerRepository.save(Customer.builder()
+                        .tenantId(tenantId)
+                        .phoneNumber(normalized)
+                        .firstSeenAt(now)
+                        .lastSeenAt(now)
+                        .build()));
+    }
 
     @Transactional(readOnly = true)
     public List<Customer> list(UUID tenantId) {

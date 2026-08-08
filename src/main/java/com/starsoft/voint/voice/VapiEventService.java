@@ -15,6 +15,7 @@ import com.starsoft.voint.call.CallRepository;
 import com.starsoft.voint.call.CallStatus;
 import com.starsoft.voint.crm.CallTranscript;
 import com.starsoft.voint.crm.CallTranscriptRepository;
+import com.starsoft.voint.crm.CustomerService;
 import com.starsoft.voint.question.CallAnalysisService;
 
 import lombok.RequiredArgsConstructor;
@@ -39,6 +40,7 @@ public class VapiEventService {
     private final CallRepository callRepository;
     private final CallTranscriptRepository callTranscriptRepository;
     private final CallAnalysisService callAnalysisService;
+    private final CustomerService customerService;
 
     @Transactional
     public void handle(JsonNode body) {
@@ -78,6 +80,13 @@ public class VapiEventService {
                 .endedAt(endedAt)
                 .build();
         call = callRepository.save(call);
+
+        // Təkrar zəng edən müştərini tanı: kart yoxdursa açılır, varsa "son görülmə" təzələnir.
+        // Nömrəsiz zəng (test/veb zəngləri, bootstrap mərhələsi) kart açmır - telefon xətti
+        // qoşulmayana qədər callerNumber boş gəlir.
+        if (callerNumber != null && !callerNumber.isBlank()) {
+            customerService.findOrCreateByPhone(tenantId, callerNumber);
+        }
 
         if (transcript != null || summary != null) {
             CallTranscript record = CallTranscript.builder()
