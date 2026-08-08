@@ -8,9 +8,12 @@ public record MeResponse(
         UUID id,
         UUID tenantId,
         String email,
-        String role
+        /** Legacy - SUPER_ADMIN/ADMIN, doğru icazələr roleId arxasındadır. */
+        String role,
+        /** Granular rolun görünən adı (məs. "Platforma admini", "Operator") - ekranda göstərmək üçün. */
+        String roleName
 ) {
-    public static MeResponse from(PanelUser u) {
-        return new MeResponse(u.getId(), u.getTenantId(), u.getEmail(), u.getRole());
+    public static MeResponse from(PanelUser u, String roleName) {
+        return new MeResponse(u.getId(), u.getTenantId(), u.getEmail(), u.getRole(), roleName);
     }
 }

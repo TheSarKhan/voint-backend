@@ -20,6 +20,7 @@ import com.starsoft.voint.passwordreset.PasswordResetRateLimiter;
 import com.starsoft.voint.passwordreset.PasswordResetService;
 import com.starsoft.voint.passwordreset.dto.ForgotPasswordRequest;
 import com.starsoft.voint.passwordreset.dto.ResetPasswordRequest;
+import com.starsoft.voint.rbac.RoleRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -39,6 +40,7 @@ public class AuthController {
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
     private final PasswordResetRateLimiter resetRateLimiter;
+    private final RoleRepository roleRepository;
 
     @PublicEndpoint("Giris")
     @PostMapping("/login")
@@ -58,7 +60,10 @@ public class AuthController {
     @GetMapping("/me")
     @Operation(summary = "Current authenticated panel user", security = @SecurityRequirement(name = "bearerAuth"))
     public MeResponse me(Principal principal) {
-        return MeResponse.from(authService.getByEmail(principal.getName()));
+        var user = authService.getByEmail(principal.getName());
+        String roleName = user.getRoleId() == null ? null
+                : roleRepository.findById(user.getRoleId()).map(r -> r.getName()).orElse(null);
+        return MeResponse.from(user, roleName);
     }
 
     /**
