@@ -361,7 +361,9 @@ public class VoiceWebhookService {
         }
         try {
             String vectorLiteral = VectorUtils.toPgVector(embedding);
-            return ragDocumentRepository.findNearestByTenant(tenantId, vectorLiteral, RAG_TOP_K).stream()
+            return ragDocumentRepository
+                    .findNearestByTenant(tenantId, vectorLiteral, VectorUtils.MAX_COSINE_DISTANCE, RAG_TOP_K)
+                    .stream()
                     .map(RagDocument::getContent)
                     .toList();
         } catch (Exception e) {

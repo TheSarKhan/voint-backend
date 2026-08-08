@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.starsoft.voint.common.exception.NotFoundException;
 import com.starsoft.voint.llm.GeminiApiClient;
+import com.starsoft.voint.rag.dto.RagBackfillResponse;
 import com.starsoft.voint.rag.dto.RagDocumentCreateRequest;
 
 import lombok.RequiredArgsConstructor;
@@ -66,6 +67,44 @@ public class RagService {
             return List.of();
         }
         int k = topK > 0 ? topK : TOP_K;
-        return ragDocumentRepository.findNearestByTenant(tenantId, VectorUtils.toPgVector(embedding), k);
+        return ragDocumentRepository.findNearestByTenant(
+                tenantId, VectorUtils.toPgVector(embedding), VectorUtils.MAX_COSINE_DISTANCE, k);
+    }
+
+    /**
+     * Embeds every {@code rag_documents} row still missing its {@code embedding} (seed data, or a
+     * row whose embed call failed when it was created). Runs at startup via
+     * {@link RagEmbeddingBackfillRunner}; also callable on demand from the admin panel so a key
+     * fixed mid-day doesn't need a restart to take effect.
+     */
+    @Transactional
+    public RagBackfillResponse backfillMissingEmbeddings() {
+        List<RagDocument> pending = ragDocumentRepository.findWithNullEmbedding();
+        if (pending.isEmpty()) {
+            log.info("RAG embedding backfill: all rag_documents already have embeddings - nothing to do");
+            return new RagBackfillResponse(0, 0, geminiApiClient.isConfigured());
+        }
+
+        if (!geminiApiClient.isConfigured()) {
+            log.warn("RAG embedding backfill: {} document(s) have no embedding, but GEMINI_API_KEY is not set - "
+                    + "skipping. They will remain unreachable by semantic search until the key is configured.",
+                    pending.size());
+            return new RagBackfillResponse(pending.size(), 0, false);
+        }
+
+        log.info("RAG embedding backfill: embedding {} document(s) with NULL embedding...", pending.size());
+        int done = 0;
+        for (RagDocument doc : pending) {
+            float[] embedding = geminiApiClient.embedContent(doc.getContent());
+            if (embedding == null) {
+                log.error("RAG embedding backfill: failed to embed document {} (tenant {}) - will retry next time",
+                        doc.getId(), doc.getTenantId());
+                continue;
+            }
+            ragDocumentRepository.updateEmbedding(doc.getId(), VectorUtils.toPgVector(embedding));
+            done++;
+        }
+        log.info("RAG embedding backfill complete: {}/{} document(s) embedded", done, pending.size());
+        return new RagBackfillResponse(pending.size(), done, true);
     }
 }

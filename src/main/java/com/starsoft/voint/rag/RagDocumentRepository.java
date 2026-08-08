@@ -20,12 +20,18 @@ public interface RagDocumentRepository extends JpaRepository<RagDocument, UUID> 
      * pgvector text literal (e.g. {@code "[0.01,0.02,...]"}, see {@link VectorUtils#toPgVector})
      * bound as a plain string and cast server-side - pgvector columns accept their text input
      * format via a normal {@code CAST(? AS vector)}, so no custom JDBC type is required.
+     *
+     * <p>{@code maxDistance} (see {@link VectorUtils#MAX_COSINE_DISTANCE}) drops matches too weak
+     * to be useful instead of always forcing the top-{@code limit} through - a query with no
+     * relevant chunk in the knowledge base can legitimately return fewer rows, or none.
      */
     @Query(value = "SELECT id, tenant_id, content, category, source, created_at FROM rag_documents "
             + "WHERE tenant_id = :tenantId AND embedding IS NOT NULL "
+            + "AND embedding <=> CAST(:embedding AS vector) <= :maxDistance "
             + "ORDER BY embedding <=> CAST(:embedding AS vector) LIMIT :limit", nativeQuery = true)
     List<RagDocument> findNearestByTenant(@Param("tenantId") UUID tenantId,
                                            @Param("embedding") String embedding,
+                                           @Param("maxDistance") double maxDistance,
                                            @Param("limit") int limit);
 
     /** Embedding isn't JPA-mapped (see {@link RagDocument}), so it's written via native SQL. */
