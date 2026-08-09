@@ -19,6 +19,13 @@ public record TenantResponse(
         Integer includedMinutes,
         BigDecimal overagePerMinute,
         Integer monthlyMinuteCap,
+        UUID billingPlanId,
+        boolean billingEnabled,
+        String billingLegalName,
+        String billingTaxId,
+        String billingEmail,
+        Integer billingDueDays,
+        Integer maxConcurrentCalls,
         String vapiAssistantId,
         String sttDomain,
         String sttTopic,
@@ -29,7 +36,10 @@ public record TenantResponse(
         return new TenantResponse(t.getId(), t.getName(), t.getSubdomain(), t.getPhoneNumber(), t.getGreetingText(),
                 t.getWorkingHours(), t.getHandoffNumber(), t.getLanguageConfig(),
                 t.getMonthlyFee(), t.getIncludedMinutes(), t.getOveragePerMinute(),
-                t.getMonthlyMinuteCap(), t.getVapiAssistantId(),
+                t.getMonthlyMinuteCap(), t.getBillingPlanId(), t.isBillingEnabled(),
+                t.getBillingLegalName(), t.getBillingTaxId(), t.getBillingEmail(), t.getBillingDueDays(),
+                t.getMaxConcurrentCalls(),
+                t.getVapiAssistantId(),
                 t.getSttDomain(), t.getSttTopic(), t.getSttVocabulary(), t.getCreatedAt());
     }
 }

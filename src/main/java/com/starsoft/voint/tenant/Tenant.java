@@ -77,6 +77,32 @@ public class Tenant {
     @Builder.Default
     private int monthlyMinuteCap = 0;
 
+    /** Chosen package. Terms are copied into the fields above on assignment, keeping old invoices stable. */
+    @Column(name = "billing_plan_id")
+    private UUID billingPlanId;
+
+    @Column(name = "billing_enabled", nullable = false)
+    @Builder.Default
+    private boolean billingEnabled = true;
+
+    @Column(name = "billing_legal_name")
+    private String billingLegalName;
+
+    @Column(name = "billing_tax_id")
+    private String billingTaxId;
+
+    @Column(name = "billing_email")
+    private String billingEmail;
+
+    /** null inherits the selected package's payment term. */
+    @Column(name = "billing_due_days")
+    private Integer billingDueDays;
+
+    /** Number of simultaneous AI call lines this business may occupy. */
+    @Column(name = "max_concurrent_calls", nullable = false)
+    @Builder.Default
+    private int maxConcurrentCalls = 1;
+
     /**
      * Panel address label: "ces" serves this tenant at ces.voint.az. Unique across the platform,
      * lowercase - see {@link Subdomains} for what is allowed and what is reserved.

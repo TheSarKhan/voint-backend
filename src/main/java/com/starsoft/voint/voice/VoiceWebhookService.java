@@ -70,6 +70,7 @@ public class VoiceWebhookService {
     private final PromptLoader promptLoader;
     private final UsageRecorder usageRecorder;
     private final TenantQuotaService tenantQuotaService;
+    private final CallConcurrencyService callConcurrencyService;
 
     public ChatCompletionResponse handle(ChatCompletionRequest request) {
         return ChatCompletionResponse.assistantMessage(request.model(), generateAnswer(request));
@@ -134,6 +135,11 @@ public class VoiceWebhookService {
         // replying, which is a worse failure than one call running past the limit.
         String vapiCallId = UsageRecorder.extractVapiCallId(request.call());
         if (tenant != null && usageRecorder.isFirstTurn(vapiCallId)) {
+            if (!callConcurrencyService.reserve(tenantId, vapiCallId, tenant.getMaxConcurrentCalls())) {
+                log.info("Tenant {} reached its {} parallel-call limit; declining call {}", tenantId, tenant.getMaxConcurrentCalls(), vapiCallId);
+                writeFrame(writer, ChatCompletionChunk.content(id, model, parallelLimitMessage(tenant), true));
+                return;
+            }
             TenantQuotaService.Quota quota = tenantQuotaService.check(tenant);
             if (quota.blocked()) {
                 log.warn("Tenant {} has reached its monthly cap ({} of {} minutes) - declining the call",
@@ -208,6 +214,11 @@ public class VoiceWebhookService {
                 : base + ".";
     }
 
+    private String parallelLimitMessage(Tenant tenant) {
+        String base = "Üzr istəyirik, hazırda bütün xətlərimiz məşğuldur. Zəhmət olmasa bir azdan yenidən zəng edin";
+        return StringUtils.hasText(tenant.getHandoffNumber()) ? base + ", ya da əməkdaşımızla birbaşa danışın." : base + ".";
+    }
+
     /**
      * Removes and returns every complete sentence sitting in the buffer, leaving any trailing
      * partial sentence behind for the next fragment to finish.
@@ -268,6 +279,13 @@ public class VoiceWebhookService {
             log.error("Resolved tenantId {} does not exist in the tenants table - proceeding without tenant context", tenantId);
         }
 
+        String vapiCallId = UsageRecorder.extractVapiCallId(request.call());
+        if (tenant != null && usageRecorder.isFirstTurn(vapiCallId)
+                && !callConcurrencyService.reserve(tenantId, vapiCallId, tenant.getMaxConcurrentCalls())) {
+            log.info("Tenant {} reached its {} parallel-call limit; declining call {}", tenantId, tenant.getMaxConcurrentCalls(), vapiCallId);
+            return parallelLimitMessage(tenant);
+        }
+
         String userText = extractLastUserMessage(request.messages());
 
         String language = detectLanguage(userText);
@@ -280,7 +298,7 @@ public class VoiceWebhookService {
         // length is the exact number of characters the voice provider will bill for - no estimate.
         // tenant != null guards the usage_events foreign key: this method deliberately answers
         // even for an unknown tenant id, and a metering insert must not be what breaks the call.
-        usageRecorder.record(tenantId, tenant != null, UsageRecorder.extractVapiCallId(request.call()),
+        usageRecorder.record(tenantId, tenant != null, vapiCallId,
                 result.promptTokens(), result.completionTokens(),
                 answer != null ? answer.length() : 0);
 

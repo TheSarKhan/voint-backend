@@ -41,6 +41,7 @@ public class VapiEventService {
     private final CallTranscriptRepository callTranscriptRepository;
     private final CallAnalysisService callAnalysisService;
     private final CustomerService customerService;
+    private final CallConcurrencyService callConcurrencyService;
 
     @Transactional
     public void handle(JsonNode body) {
@@ -80,6 +81,7 @@ public class VapiEventService {
                 .endedAt(endedAt)
                 .build();
         call = callRepository.save(call);
+        callConcurrencyService.release(tenantId, message.path("call").path("id").asText(null));
 
         // Təkrar zəng edən müştərini tanı: kart yoxdursa açılır, varsa "son görülmə" təzələnir.
         // Nömrəsiz zəng (test/veb zəngləri, bootstrap mərhələsi) kart açmır - telefon xətti
