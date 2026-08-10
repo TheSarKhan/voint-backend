@@ -103,7 +103,7 @@ public class RoleService {
                 .description(request.description())
                 .template(request.template())
                 .build());
-        replacePermissions(role.getId(), request.permissions());
+        replacePermissions(role.getId(), role.getTenantId(), request.permissions());
         return toDetail(role);
     }
 
@@ -119,7 +119,7 @@ public class RoleService {
         // tenant must not be able to move a role somewhere it does not belong.
         role.setDepartmentId(resolveDepartment(request.departmentId(), role.getTenantId()));
         role = roleRepository.save(role);
-        replacePermissions(roleId, request.permissions());
+        replacePermissions(roleId, role.getTenantId(), request.permissions());
         return toDetail(role);
     }
 
@@ -235,8 +235,14 @@ public class RoleService {
     /**
      * Replaces the whole matrix rather than patching it: the editor always submits the full grid
      * it is displaying, so a merge would silently keep a permission the operator just unticked.
+     *
+     * <p>A tenant-owned role (tenantId != null) may never hold a platform-only resource (TENANT,
+     * LEAD, PROVIDER - see {@link Permission.Resource#isPlatformOnly()}): granting one would let
+     * that tenant's own role escalate into platform actions the moment anything stops enforcing
+     * this at the controller layer, as happened before RoleController/DepartmentController grew
+     * their requireSuperAdmin() calls. Caught here too, defense in depth.
      */
-    private void replacePermissions(UUID roleId, Map<String, List<String>> grid) {
+    private void replacePermissions(UUID roleId, UUID tenantId, Map<String, List<String>> grid) {
         permissionRepository.deleteByRoleId(roleId);
         if (grid == null || grid.isEmpty()) {
             permissions.evictRole(roleId);
@@ -248,6 +254,10 @@ public class RoleService {
                 return;
             }
             Permission.Resource r = Permission.Resource.valueOf(resource);
+            if (tenantId != null && r.isPlatformOnly()) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "'" + r.getLabel() + "' yalnız platforma rollarına verilə bilər.");
+            }
             actions.forEach(a -> rows.add(
                     new RolePermission(roleId, r, Permission.Action.valueOf(a))));
         });

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.starsoft.voint.auth.TenantAccessGuard;
 import com.starsoft.voint.rbac.dto.RoleDetail;
 import com.starsoft.voint.rbac.dto.RoleUpsertRequest;
 
@@ -23,12 +24,22 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * ROLE is dual-purpose - a tenant's own "Sahib" template is seeded with ROLE:* (see V11) so it
+ * could one day manage its own roles - but that screen was never built, and every caller today is
+ * the admin panel's RolesManager, always a platform account. {@code tenantScoped = false} only
+ * turns off the interceptor's own-tenant check; it does not restrict who may call this, so every
+ * method needs the same explicit requireSuperAdmin() as PlatformUserController/ApprovalController -
+ * without it, any tenant holding ROLE:READ/UPDATE could read or rewrite another tenant's (or the
+ * platform's) permission matrix.
+ */
 @RestController
 @RequiredArgsConstructor
 @Tag(name = "Roles", description = "Roles and their permission matrix")
 public class RoleController {
 
     private final RoleService roleService;
+    private final TenantAccessGuard tenantAccessGuard;
 
     /** The matrix's own vocabulary, so the screen never hardcodes a resource list that drifts. */
     @RequirePermission(resource = Permission.Resource.ROLE, action = Permission.Action.READ,
@@ -36,6 +47,7 @@ public class RoleController {
     @GetMapping("/api/v1/admin/permissions/catalog")
     @Operation(summary = "Resources and actions the matrix can contain")
     public Map<String, Object> catalog() {
+        tenantAccessGuard.requireSuperAdmin();
         return Map.of(
                 "resources", List.of(Permission.Resource.values()).stream()
                         .map(r -> Map.of(
@@ -54,6 +66,7 @@ public class RoleController {
     @GetMapping("/api/v1/admin/roles")
     @Operation(summary = "Roles, with their permission matrix")
     public List<RoleDetail> list(@RequestParam(required = false) UUID tenantId) {
+        tenantAccessGuard.requireSuperAdmin();
         return roleService.detailsFor(tenantId);
     }
 
@@ -63,6 +76,7 @@ public class RoleController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a role")
     public RoleDetail create(@Valid @RequestBody RoleUpsertRequest request) {
+        tenantAccessGuard.requireSuperAdmin();
         return roleService.create(request);
     }
 
@@ -72,6 +86,7 @@ public class RoleController {
     @Operation(summary = "Rename a role and replace its permission matrix")
     public RoleDetail update(@PathVariable UUID roleId,
                              @Valid @RequestBody RoleUpsertRequest request) {
+        tenantAccessGuard.requireSuperAdmin();
         return roleService.update(roleId, request);
     }
 
@@ -81,6 +96,7 @@ public class RoleController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete a role; refused for built-in roles and roles still in use")
     public void delete(@PathVariable UUID roleId) {
+        tenantAccessGuard.requireSuperAdmin();
         roleService.delete(roleId);
     }
 
@@ -91,6 +107,7 @@ public class RoleController {
     @Operation(summary = "Copy a template role into a business, optionally into one of its departments")
     public RoleDetail copyTemplate(@PathVariable UUID templateId, @PathVariable UUID tenantId,
                                    @RequestParam(required = false) UUID departmentId) {
+        tenantAccessGuard.requireSuperAdmin();
         return roleService.copyTemplateTo(templateId, tenantId, departmentId);
     }
 }

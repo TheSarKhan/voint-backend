@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.starsoft.voint.auth.TenantAccessGuard;
 import com.starsoft.voint.rbac.dto.DepartmentCopyRequest;
 import com.starsoft.voint.rbac.dto.DepartmentCopyResponse;
 import com.starsoft.voint.rbac.dto.DepartmentDetail;
@@ -28,6 +29,11 @@ import lombok.RequiredArgsConstructor;
 /**
  * Departments group roles. Platform departments (Satış, Dəstək) describe how Voint itself is
  * organised; a tenant's departments describe its own staff.
+ *
+ * <p>Same reasoning as {@link RoleController}: ROLE is dual-purpose, {@code tenantScoped = false}
+ * only skips the interceptor's own-tenant check, and every caller today is the admin panel - so
+ * every method needs an explicit requireSuperAdmin() or a tenant holding ROLE:* could read or
+ * rewrite another tenant's departments.
  */
 @RestController
 @RequiredArgsConstructor
@@ -36,12 +42,14 @@ public class DepartmentController {
 
     private final DepartmentService departmentService;
     private final RoleService roleService;
+    private final TenantAccessGuard tenantAccessGuard;
 
     @RequirePermission(resource = Permission.Resource.ROLE, action = Permission.Action.READ,
             tenantScoped = false)
     @GetMapping("/api/v1/admin/departments")
     @Operation(summary = "Departments, with how many roles each holds")
     public List<DepartmentDetail> list(@RequestParam(required = false) UUID tenantId) {
+        tenantAccessGuard.requireSuperAdmin();
         return departmentService.list(tenantId);
     }
 
@@ -51,6 +59,7 @@ public class DepartmentController {
     @GetMapping("/api/v1/admin/departments/{id}/roles")
     @Operation(summary = "Roles filed under one department")
     public List<RoleDetail> roles(@PathVariable UUID id) {
+        tenantAccessGuard.requireSuperAdmin();
         return roleService.detailsForDepartment(id);
     }
 
@@ -60,6 +69,7 @@ public class DepartmentController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Create a department")
     public DepartmentDetail create(@Valid @RequestBody DepartmentUpsertRequest request) {
+        tenantAccessGuard.requireSuperAdmin();
         return departmentService.create(request);
     }
 
@@ -69,6 +79,7 @@ public class DepartmentController {
     @Operation(summary = "Rename a department")
     public DepartmentDetail update(@PathVariable UUID id,
                                    @Valid @RequestBody DepartmentUpsertRequest request) {
+        tenantAccessGuard.requireSuperAdmin();
         return departmentService.update(id, request);
     }
 
@@ -79,6 +90,7 @@ public class DepartmentController {
     @Operation(summary = "Copy a template department, with its roles, into a business")
     public DepartmentCopyResponse copyTo(@PathVariable UUID id, @PathVariable UUID tenantId,
                                          @RequestBody(required = false) DepartmentCopyRequest request) {
+        tenantAccessGuard.requireSuperAdmin();
         return roleService.copyDepartmentTo(id, tenantId, request != null ? request.roleIds() : null);
     }
 
@@ -88,6 +100,7 @@ public class DepartmentController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Delete a department; its roles are kept and become ungrouped")
     public void delete(@PathVariable UUID id) {
+        tenantAccessGuard.requireSuperAdmin();
         departmentService.delete(id);
     }
 }
