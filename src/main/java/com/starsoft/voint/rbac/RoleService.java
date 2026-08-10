@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.starsoft.voint.common.exception.NotFoundException;
+import com.starsoft.voint.rbac.dto.DepartmentCopyResponse;
+import com.starsoft.voint.rbac.dto.DepartmentDetail;
 import com.starsoft.voint.rbac.dto.RoleDetail;
 import com.starsoft.voint.rbac.dto.RoleUpsertRequest;
 
@@ -72,7 +74,7 @@ public class RoleService {
     @Transactional
     public Role createOwnerRoleFor(UUID tenantId) {
         return roleRepository.findByTenantIdAndNameIgnoreCase(tenantId, "Sahib")
-                .orElseGet(() -> copyTemplate(OWNER_TEMPLATE_ID, tenantId, true));
+                .orElseGet(() -> copyTemplate(OWNER_TEMPLATE_ID, tenantId, true, null));
     }
 
     @Transactional(readOnly = true)
@@ -81,6 +83,13 @@ public class RoleService {
                 ? roleRepository.findByTenantIdIsNullOrderByName()
                 : roleRepository.findByTenantIdOrderByName(tenantId);
         return roles.stream().map(this::toDetail).toList();
+    }
+
+    /** A template department's own roles - the picklist shown before copying it into a tenant. */
+    @Transactional(readOnly = true)
+    public List<RoleDetail> detailsForDepartment(UUID departmentId) {
+        return roleRepository.findByDepartmentIdOrderByName(departmentId).stream()
+                .map(this::toDetail).toList();
     }
 
     @Transactional
@@ -136,21 +145,60 @@ public class RoleService {
      * The operator copying a template by hand, as opposed to the automatic copy a new business
      * gets. The result is an ordinary role: not marked system, so it can be deleted again if the
      * copy turns out to be the wrong starting point.
+     *
+     * <p>{@code departmentId} is optional and must be one of the TARGET tenant's own departments
+     * (never the template's own - see {@link #resolveDepartment}). A name collision with an
+     * existing role of the tenant is not an error here: it is renamed ("Operator" -&gt;
+     * "Operator 2") rather than rejected, because refusing the whole import over one clashing name
+     * is worse than a duplicate the operator can rename or delete afterward.
      */
     @Transactional
-    public RoleDetail copyTemplateTo(UUID templateId, UUID tenantId) {
+    public RoleDetail copyTemplateTo(UUID templateId, UUID tenantId, UUID departmentId) {
         Role template = roleRepository.findById(templateId)
                 .orElseThrow(() -> NotFoundException.of("Şablon rol", templateId));
         if (template.getTenantId() != null) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "Bu, bir müəssisənin öz roludur - şablon deyil, köçürülə bilməz.");
         }
-        requireNameFree(tenantId, template.getName(), null);
-        Role copy = copyTemplate(templateId, tenantId, false);
+        UUID resolvedDepartment = resolveDepartment(departmentId, tenantId);
+        Role copy = copyTemplate(templateId, tenantId, false, resolvedDepartment);
         if (copy == null) {
             throw NotFoundException.of("Şablon rol", templateId);
         }
         return toDetail(copy);
+    }
+
+    /**
+     * Copies a whole template department into a tenant: a new department of its own, plus a copy
+     * of every selected role from the template. {@code roleIds} null means "all of them" - the
+     * default the screen offers, since leaving a role behind by accident is easy to miss and
+     * leaving one in is easy to delete afterward if it turns out unwanted.
+     */
+    @Transactional
+    public DepartmentCopyResponse copyDepartmentTo(UUID templateDepartmentId, UUID tenantId, List<UUID> roleIds) {
+        Department template = departmentRepository.findById(templateDepartmentId)
+                .orElseThrow(() -> NotFoundException.of("Departament", templateDepartmentId));
+        if (template.getTenantId() != null) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Bu, bir müəssisənin öz departamentidir - şablon deyil, köçürülə bilməz.");
+        }
+        Department copy = departmentRepository.save(Department.builder()
+                .tenantId(tenantId)
+                .name(uniqueDepartmentNameFor(tenantId, template.getName()))
+                .description(template.getDescription())
+                .build());
+
+        List<RoleDetail> copiedRoles = new ArrayList<>();
+        for (Role templateRole : roleRepository.findByDepartmentIdOrderByName(templateDepartmentId)) {
+            if (roleIds != null && !roleIds.contains(templateRole.getId())) {
+                continue;
+            }
+            Role roleCopy = copyTemplate(templateRole.getId(), tenantId, false, copy.getId());
+            if (roleCopy != null) {
+                copiedRoles.add(toDetail(roleCopy));
+            }
+        }
+        return new DepartmentCopyResponse(toDepartmentDetail(copy), copiedRoles);
     }
 
     /**
@@ -229,22 +277,26 @@ public class RoleService {
     }
 
     /**
-     * @param system true only for the owner role a new business is provisioned with, which must
-     *               survive: deleting it would leave the business with nothing to assign anyone.
-     *               A template the operator copies by hand is an ordinary, deletable role.
+     * @param system       true only for the owner role a new business is provisioned with, which
+     *                     must survive: deleting it would leave the business with nothing to
+     *                     assign anyone. A template the operator copies by hand is an ordinary,
+     *                     deletable role.
+     * @param departmentId the TARGET tenant's own department (already resolved/validated by the
+     *                     caller), or null for ungrouped. Never the template's own department -
+     *                     that one belongs to the platform, and the business being copied into
+     *                     cannot see it.
      */
-    private Role copyTemplate(UUID templateId, UUID tenantId, boolean system) {
+    private Role copyTemplate(UUID templateId, UUID tenantId, boolean system, UUID departmentId) {
         Role template = roleRepository.findById(templateId).orElse(null);
         if (template == null) {
             log.error("Owner template {} is missing - tenant {} will have no role to assign",
                     templateId, tenantId);
             return null;
         }
-        // Deliberately not the template's department: that one belongs to the platform, and the
-        // business it is being copied into cannot see it.
         Role copy = roleRepository.save(Role.builder()
                 .tenantId(tenantId)
-                .name(template.getName())
+                .departmentId(departmentId)
+                .name(uniqueNameFor(tenantId, template.getName()))
                 .description(template.getDescription())
                 .system(system)
                 .build());
@@ -255,5 +307,36 @@ public class RoleService {
 
         log.info("Created '{}' role for tenant {}", copy.getName(), tenantId);
         return copy;
+    }
+
+    /**
+     * Appends " 2", " 3"... until the name is free in this tenant. Copy paths use this instead of
+     * {@link #requireNameFree} on purpose: refusing an entire template/department import because
+     * one role's name happens to collide is worse than a harmless duplicate the operator can
+     * rename or delete afterward.
+     */
+    private String uniqueNameFor(UUID tenantId, String baseName) {
+        String candidate = baseName;
+        int n = 2;
+        while (roleRepository.existsByTenantIdAndNameIgnoreCase(tenantId, candidate)) {
+            candidate = baseName + " " + n;
+            n++;
+        }
+        return candidate;
+    }
+
+    private String uniqueDepartmentNameFor(UUID tenantId, String baseName) {
+        String candidate = baseName;
+        int n = 2;
+        while (departmentRepository.existsByTenantIdAndNameIgnoreCase(tenantId, candidate)) {
+            candidate = baseName + " " + n;
+            n++;
+        }
+        return candidate;
+    }
+
+    private DepartmentDetail toDepartmentDetail(Department d) {
+        return new DepartmentDetail(d.getId(), d.getTenantId(), d.getName(), d.getDescription(),
+                roleRepository.countByDepartmentId(d.getId()));
     }
 }

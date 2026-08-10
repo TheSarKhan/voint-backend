@@ -88,8 +88,9 @@ public class RoleController {
     @RequirePermission(resource = Permission.Resource.ROLE, action = Permission.Action.CREATE,
             tenantScoped = false)
     @PostMapping("/api/v1/admin/roles/{templateId}/copy-to/{tenantId}")
-    @Operation(summary = "Copy a template role into a business")
-    public RoleDetail copyTemplate(@PathVariable UUID templateId, @PathVariable UUID tenantId) {
-        return roleService.copyTemplateTo(templateId, tenantId);
+    @Operation(summary = "Copy a template role into a business, optionally into one of its departments")
+    public RoleDetail copyTemplate(@PathVariable UUID templateId, @PathVariable UUID tenantId,
+                                   @RequestParam(required = false) UUID departmentId) {
+        return roleService.copyTemplateTo(templateId, tenantId, departmentId);
     }
 }

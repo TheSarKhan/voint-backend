@@ -14,8 +14,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.starsoft.voint.rbac.dto.DepartmentCopyRequest;
+import com.starsoft.voint.rbac.dto.DepartmentCopyResponse;
 import com.starsoft.voint.rbac.dto.DepartmentDetail;
 import com.starsoft.voint.rbac.dto.DepartmentUpsertRequest;
+import com.starsoft.voint.rbac.dto.RoleDetail;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 public class DepartmentController {
 
     private final DepartmentService departmentService;
+    private final RoleService roleService;
 
     @RequirePermission(resource = Permission.Resource.ROLE, action = Permission.Action.READ,
             tenantScoped = false)
@@ -39,6 +43,15 @@ public class DepartmentController {
     @Operation(summary = "Departments, with how many roles each holds")
     public List<DepartmentDetail> list(@RequestParam(required = false) UUID tenantId) {
         return departmentService.list(tenantId);
+    }
+
+    /** A template department's own roles - the picklist before copying the department. */
+    @RequirePermission(resource = Permission.Resource.ROLE, action = Permission.Action.READ,
+            tenantScoped = false)
+    @GetMapping("/api/v1/admin/departments/{id}/roles")
+    @Operation(summary = "Roles filed under one department")
+    public List<RoleDetail> roles(@PathVariable UUID id) {
+        return roleService.detailsForDepartment(id);
     }
 
     @RequirePermission(resource = Permission.Resource.ROLE, action = Permission.Action.CREATE,
@@ -57,6 +70,16 @@ public class DepartmentController {
     public DepartmentDetail update(@PathVariable UUID id,
                                    @Valid @RequestBody DepartmentUpsertRequest request) {
         return departmentService.update(id, request);
+    }
+
+    /** Copies a template department - and (by default) every role filed under it - into a tenant. */
+    @RequirePermission(resource = Permission.Resource.ROLE, action = Permission.Action.CREATE,
+            tenantScoped = false)
+    @PostMapping("/api/v1/admin/departments/{id}/copy-to/{tenantId}")
+    @Operation(summary = "Copy a template department, with its roles, into a business")
+    public DepartmentCopyResponse copyTo(@PathVariable UUID id, @PathVariable UUID tenantId,
+                                         @RequestBody(required = false) DepartmentCopyRequest request) {
+        return roleService.copyDepartmentTo(id, tenantId, request != null ? request.roleIds() : null);
     }
 
     @RequirePermission(resource = Permission.Resource.ROLE, action = Permission.Action.DELETE,
