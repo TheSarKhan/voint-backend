@@ -161,6 +161,9 @@ public class UsageService {
         if (request.monthlyMinuteCap() != null) {
             tenant.setMonthlyMinuteCap(request.monthlyMinuteCap());
         }
+        if (request.maxConcurrentCalls() != null) {
+            tenant.setMaxConcurrentCalls(request.maxConcurrentCalls());
+        }
         return tenantRepository.save(tenant);
     }
 
