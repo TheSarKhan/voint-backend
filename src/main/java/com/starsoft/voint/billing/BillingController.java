@@ -25,6 +25,9 @@ public class BillingController {
     @PutMapping("/plans/{id}") @RequirePermission(resource = Permission.Resource.BILLING, action = Permission.Action.UPDATE, tenantScoped = false)
     public BillingPlanResponse updatePlan(@PathVariable UUID id, @Valid @RequestBody BillingPlanRequest request) { access.requireSuperAdmin(); return billing.updatePlan(id, request); }
 
+    @GetMapping("/plans/{id}") @RequirePermission(resource = Permission.Resource.BILLING, action = Permission.Action.READ, tenantScoped = false)
+    public BillingPlanDetailResponse planDetail(@PathVariable UUID id) { access.requireSuperAdmin(); return billing.planDetail(id); }
+
     @PutMapping("/tenants/{tenantId}/profile") @RequirePermission(resource = Permission.Resource.BILLING, action = Permission.Action.UPDATE, tenantScoped = false)
     public TenantResponse profile(@PathVariable UUID tenantId, @Valid @RequestBody BillingProfileRequest request) { access.requireSuperAdmin(); return TenantResponse.from(billing.updateProfile(tenantId, request)); }
 

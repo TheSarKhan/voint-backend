@@ -1,13 +1,16 @@
 package com.starsoft.voint.billing;
 
+import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.starsoft.voint.billing.dto.*;
 import com.starsoft.voint.common.exception.NotFoundException;
 import com.starsoft.voint.tenant.Tenant;
 import com.starsoft.voint.tenant.TenantRepository;
+import com.starsoft.voint.usage.TenantQuotaService;
 import com.starsoft.voint.usage.UsageService;
 import com.starsoft.voint.usage.dto.UsageReport;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,7 @@ public class BillingService {
     private final BillingInvoiceRepository invoices;
     private final TenantRepository tenants;
     private final UsageService usage;
+    private final TenantQuotaService quota;
 
     @Transactional(readOnly = true)
     public List<BillingPlanResponse> listPlans() { return plans.findAllByOrderByActiveDescNameAsc().stream().map(BillingPlanResponse::from).toList(); }
@@ -32,6 +36,58 @@ public class BillingService {
     public BillingPlanResponse updatePlan(UUID id, BillingPlanRequest r) {
         BillingPlan p = plans.findById(id).orElseThrow(() -> NotFoundException.of("Billing plan", id));
         apply(p, r); return BillingPlanResponse.from(plans.save(p));
+    }
+
+    /**
+     * Who is on this plan, what it actually brings in, and whether its minute cap is sized right
+     * for the tenants that have it - the plan detail screen.
+     */
+    @Transactional(readOnly = true)
+    public BillingPlanDetailResponse planDetail(UUID planId) {
+        BillingPlan plan = plans.findById(planId).orElseThrow(() -> NotFoundException.of("Billing plan", planId));
+        List<Tenant> onPlan = tenants.findByBillingPlanId(planId);
+        Set<UUID> onPlanIds = onPlan.stream().map(Tenant::getId).collect(Collectors.toSet());
+
+        Map<UUID, UsageReport> currentByTenant = usage.reportForAll(null).stream()
+                .filter(rep -> onPlanIds.contains(rep.tenantId()))
+                .collect(Collectors.toMap(UsageReport::tenantId, rep -> rep));
+
+        BigDecimal currentRevenue = currentByTenant.values().stream()
+                .map(UsageReport::invoiceAzn).reduce(BigDecimal.ZERO, BigDecimal::add);
+        long currentCalls = currentByTenant.values().stream().mapToLong(rep -> rep.usage().calls()).sum();
+        BigDecimal currentMinutes = currentByTenant.values().stream()
+                .map(rep -> rep.usage().minutes()).reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        int ok = 0, warning = 0, blocked = 0;
+        List<BillingPlanDetailResponse.PlanTenant> tenantRows = new ArrayList<>(onPlan.size());
+        for (Tenant t : onPlan) {
+            TenantQuotaService.Status status = quota.check(t).status();
+            switch (status) {
+                case OK -> ok++;
+                case WARNING -> warning++;
+                case BLOCKED -> blocked++;
+            }
+            UsageReport rep = currentByTenant.get(t.getId());
+            tenantRows.add(new BillingPlanDetailResponse.PlanTenant(t.getId(), t.getName(), t.getSubdomain(),
+                    status.name(), rep != null ? rep.invoiceAzn() : BigDecimal.ZERO,
+                    rep != null ? rep.usage().calls() : 0));
+        }
+        tenantRows.sort(Comparator.comparing(BillingPlanDetailResponse.PlanTenant::name, String.CASE_INSENSITIVE_ORDER));
+
+        List<BillingPlanDetailResponse.MonthRevenue> trend = new ArrayList<>(12);
+        YearMonth cursor = YearMonth.now();
+        for (int i = 11; i >= 0; i--) {
+            YearMonth ym = cursor.minusMonths(i);
+            BigDecimal revenue = usage.reportForAll(ym.toString()).stream()
+                    .filter(rep -> onPlanIds.contains(rep.tenantId()))
+                    .map(UsageReport::invoiceAzn)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            trend.add(new BillingPlanDetailResponse.MonthRevenue(ym.toString(), revenue));
+        }
+
+        return new BillingPlanDetailResponse(BillingPlanResponse.from(plan), onPlan.size(),
+                currentRevenue, currentCalls, currentMinutes,
+                new BillingPlanDetailResponse.QuotaBreakdown(ok, warning, blocked), trend, tenantRows);
     }
 
     @Transactional
@@ -52,8 +108,19 @@ public class BillingService {
     @Transactional(readOnly = true)
     public List<BillingInvoiceResponse> invoicesFor(UUID tenantId) { return invoices.findByTenantIdOrderByPeriodDesc(tenantId).stream().map(BillingInvoiceResponse::from).toList(); }
 
+    /** Every tenant's invoice for one period, newest-highest-first - who owes what, platform-wide. */
     @Transactional(readOnly = true)
-    public List<BillingInvoiceResponse> invoicesForPeriod(String period) { return invoices.findByPeriodOrderByTotalAmountDesc(period(period)).stream().map(BillingInvoiceResponse::from).toList(); }
+    public List<BillingInvoiceResponse> invoicesForPeriod(String period) {
+        List<BillingInvoice> rows = invoices.findByPeriodOrderByTotalAmountDesc(period(period));
+        Map<UUID, Tenant> byTenant = tenants.findAllById(rows.stream().map(BillingInvoice::getTenantId).toList())
+                .stream().collect(Collectors.toMap(Tenant::getId, t -> t));
+        return rows.stream()
+                .map(i -> {
+                    Tenant t = byTenant.get(i.getTenantId());
+                    return BillingInvoiceResponse.from(i, t != null ? t.getName() : "?", t != null ? t.getSubdomain() : null);
+                })
+                .toList();
+    }
 
     /** Takes a one-time financial snapshot. Existing locked invoices are intentionally untouched. */
     @Transactional

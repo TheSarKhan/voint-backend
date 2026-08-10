@@ -1,5 +1,6 @@
 package com.starsoft.voint.tenant;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,6 +16,9 @@ public interface TenantRepository extends JpaRepository<Tenant, UUID> {
 
     /** Hostnames are case-insensitive, so the lookup must be too. */
     Optional<Tenant> findBySubdomainIgnoreCase(String subdomain);
+
+    /** Every tenant currently on a given catalogue plan - drives the plan detail page. */
+    List<Tenant> findByBillingPlanId(UUID billingPlanId);
 
     /**
      * Searches the fields the admin table actually shows. A blank query returns everything, so the
