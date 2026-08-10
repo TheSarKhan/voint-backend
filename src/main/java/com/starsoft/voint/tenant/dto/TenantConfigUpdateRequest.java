@@ -2,6 +2,7 @@ package com.starsoft.voint.tenant.dto;
 
 /** Partial config update - null fields are left unchanged. */
 public record TenantConfigUpdateRequest(
+        String name,
         String subdomain,
         String phoneNumber,
         String greetingText,

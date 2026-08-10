@@ -98,6 +98,9 @@ public class TenantService {
     @Transactional
     public Tenant updateConfig(UUID id, TenantConfigUpdateRequest request) {
         Tenant tenant = get(id);
+        if (request.name() != null && !request.name().isBlank()) {
+            tenant.setName(request.name().trim());
+        }
         if (request.subdomain() != null) {
             tenant.setSubdomain(normalizeSubdomain(request.subdomain(), tenant.getId()));
         }
