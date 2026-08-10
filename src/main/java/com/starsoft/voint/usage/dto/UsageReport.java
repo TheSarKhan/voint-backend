@@ -12,6 +12,8 @@ import java.util.UUID;
 public record UsageReport(
         UUID tenantId,
         String tenantName,
+        /** Nullable - a tenant can exist without one yet. Panel falls back to tenantId in links. */
+        String tenantSubdomain,
         /** ISO year-month, e.g. "2026-07". */
         String month,
         UsageTotals usage,

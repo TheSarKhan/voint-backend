@@ -43,6 +43,8 @@ public record DashboardResponse(
             UUID id,
             UUID tenantId,
             String tenantName,
+            /** Nullable - a tenant can exist without one yet. Panel falls back to tenantId in links. */
+            String tenantSubdomain,
             String callerNumber,
             CallStatus status,
             Instant startedAt,
@@ -53,6 +55,8 @@ public record DashboardResponse(
     public record TenantMargin(
             UUID tenantId,
             String tenantName,
+            /** Nullable - a tenant can exist without one yet. Panel falls back to tenantId in links. */
+            String tenantSubdomain,
             long calls,
             BigDecimal invoiceAzn,
             BigDecimal marginAzn,

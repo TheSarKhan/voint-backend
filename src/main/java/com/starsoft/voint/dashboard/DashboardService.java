@@ -66,6 +66,11 @@ public class DashboardService {
         List<Tenant> tenants = tenantRepository.findAll();
         Map<java.util.UUID, String> tenantNames = tenants.stream()
                 .collect(Collectors.toMap(Tenant::getId, Tenant::getName));
+        // toMap throws on a null value, and subdomain can be null - keep only the tenants that
+        // have one, so a lookup miss (null via Map.get) means exactly "no subdomain" not "bug".
+        Map<java.util.UUID, String> tenantSubdomains = tenants.stream()
+                .filter(t -> t.getSubdomain() != null)
+                .collect(Collectors.toMap(Tenant::getId, Tenant::getSubdomain));
 
         // Reuses UsageService's own pricing, not a second copy of it - see the class javadoc.
         List<UsageReport> reports = usageService.reportForAll(null);
@@ -91,7 +96,7 @@ public class DashboardService {
                 unansweredQuestionRepository.countByStatus(QuestionStatus.OPEN),
                 leadService.countNew(),
                 callsByDay(today),
-                recentCalls(tenantNames),
+                recentCalls(tenantNames, tenantSubdomains),
                 topTenants(reports));
     }
 
@@ -112,10 +117,12 @@ public class DashboardService {
         return trend;
     }
 
-    private List<RecentCall> recentCalls(Map<java.util.UUID, String> tenantNames) {
+    private List<RecentCall> recentCalls(Map<java.util.UUID, String> tenantNames,
+                                          Map<java.util.UUID, String> tenantSubdomains) {
         return callRepository.findTop10ByOrderByStartedAtDesc().stream()
                 .map(c -> new RecentCall(c.getId(), c.getTenantId(),
                         tenantNames.getOrDefault(c.getTenantId(), "?"),
+                        tenantSubdomains.get(c.getTenantId()),
                         c.getCallerNumber(), c.getStatus(), c.getStartedAt(), c.getDurationSeconds()))
                 .limit(RECENT_CALLS)
                 .toList();
@@ -125,8 +132,8 @@ public class DashboardService {
     private List<TenantMargin> topTenants(List<UsageReport> reports) {
         return reports.stream()
                 .limit(TOP_TENANTS)
-                .map(r -> new TenantMargin(r.tenantId(), r.tenantName(), r.usage().calls(),
-                        r.invoiceAzn(), r.marginAzn(), r.marginPercent()))
+                .map(r -> new TenantMargin(r.tenantId(), r.tenantName(), r.tenantSubdomain(),
+                        r.usage().calls(), r.invoiceAzn(), r.marginAzn(), r.marginPercent()))
                 .toList();
     }
 

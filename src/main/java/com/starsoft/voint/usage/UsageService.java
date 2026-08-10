@@ -208,6 +208,7 @@ public class UsageService {
         return new UsageReport(
                 tenant.getId(),
                 tenant.getName(),
+                tenant.getSubdomain(),
                 ym.toString(),
                 new UsageReport.UsageTotals(callCount, durationSeconds, minutes, promptTokens,
                         completionTokens, promptTokens + completionTokens, ttsCharacters),
