@@ -4,6 +4,9 @@ import com.starsoft.voint.rbac.Permission;
 import com.starsoft.voint.rbac.PublicEndpoint;
 import com.starsoft.voint.rbac.RequirePermission;
 import java.security.Principal;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +24,7 @@ import com.starsoft.voint.passwordreset.PasswordResetService;
 import com.starsoft.voint.passwordreset.dto.ForgotPasswordRequest;
 import com.starsoft.voint.passwordreset.dto.ResetPasswordRequest;
 import com.starsoft.voint.rbac.RoleRepository;
+import com.starsoft.voint.rbac.PermissionResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -41,6 +45,7 @@ public class AuthController {
     private final PasswordResetService passwordResetService;
     private final PasswordResetRateLimiter resetRateLimiter;
     private final RoleRepository roleRepository;
+    private final PermissionResolver permissionResolver;
 
     @PublicEndpoint("Giris")
     @PostMapping("/login")
@@ -63,7 +68,15 @@ public class AuthController {
         var user = authService.getByEmail(principal.getName());
         String roleName = user.getRoleId() == null ? null
                 : roleRepository.findById(user.getRoleId()).map(r -> r.getName()).orElse(null);
-        return MeResponse.from(user, roleName);
+        // The nav and buttons decide what to even offer from this - a granular role that lacks
+        // BILLING:READ should never show a Hesablaşma link that 403s the moment it's clicked.
+        Map<String, List<String>> permissions = new LinkedHashMap<>();
+        if (user.getRoleId() != null) {
+            permissionResolver.permissionsOf(user.getRoleId())
+                    .forEach((resource, actions) -> permissions.put(resource.name(),
+                            actions.stream().map(Enum::name).toList()));
+        }
+        return MeResponse.from(user, roleName, permissions);
     }
 
     /**
