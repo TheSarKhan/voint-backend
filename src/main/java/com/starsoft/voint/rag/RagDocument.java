@@ -49,7 +49,20 @@ public class RagDocument {
     /** Where the chunk came from (manual entry, file name, URL...). */
     private String source;
 
+    /** False = paused: kept around, but excluded from what the agent can be told (see findNearestByTenant). */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean active = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();
+
+    /** How many times this chunk has been pulled into a real call's context - see VoiceWebhookService#ragSearch. */
+    @Column(name = "hit_count", nullable = false)
+    @Builder.Default
+    private int hitCount = 0;
+
+    @Column(name = "last_used_at")
+    private Instant lastUsedAt;
 }

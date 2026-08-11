@@ -11,10 +11,14 @@ public record RagDocumentResponse(
         String content,
         String category,
         String source,
+        boolean active,
+        int hitCount,
+        Instant lastUsedAt,
         Instant createdAt
 ) {
     public static RagDocumentResponse from(RagDocument d) {
         return new RagDocumentResponse(d.getId(), d.getTenantId(), d.getContent(),
-                d.getCategory(), d.getSource(), d.getCreatedAt());
+                d.getCategory(), d.getSource(), d.isActive(), d.getHitCount(), d.getLastUsedAt(),
+                d.getCreatedAt());
     }
 }
