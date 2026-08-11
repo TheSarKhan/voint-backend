@@ -1,5 +1,7 @@
 package com.starsoft.voint.auth;
 
+import java.time.Instant;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,7 +25,13 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
-    @Transactional(readOnly = true)
+    /**
+     * Not read-only: a real credentialed login is also the moment {@code lastLoginAt} is stamped -
+     * see the Komanda/Team screen's "Son giriş" column. Deliberately NOT done in {@link #refresh},
+     * which fires silently every few minutes while a tab is open - stamping there would turn "last
+     * login" into "browser was open", which is a different (and less useful) fact.
+     */
+    @Transactional
     public TokenResponse login(LoginRequest request) {
         PanelUser user = panelUserRepository.findByEmail(request.email())
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
@@ -31,6 +39,8 @@ public class AuthService {
             throw new BadCredentialsException("Invalid email or password");
         }
         requireActive(user);
+        user.setLastLoginAt(Instant.now());
+        panelUserRepository.save(user);
         return TokenResponse.bearer(
                 jwtService.generateAccessToken(user),
                 jwtService.generateRefreshToken(user));
