@@ -63,6 +63,30 @@ public class DepartmentService {
         departmentRepository.delete(department);
     }
 
+    /**
+     * Guards the tenant self-service routes: confirms {@code departmentId} is owned by
+     * {@code tenantId} before an update/delete touches it. 404 rather than 403 - a tenant should
+     * not learn that another business's department exists at all.
+     */
+    @Transactional(readOnly = true)
+    public void requireOwnedByTenant(UUID departmentId, UUID tenantId) {
+        Department department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> NotFoundException.of("Departament", departmentId));
+        if (!tenantId.equals(department.getTenantId())) {
+            throw NotFoundException.of("Departament", departmentId);
+        }
+    }
+
+    /** Like {@link #requireOwnedByTenant}, but also allows a platform template - previewing its roles before copying it in. */
+    @Transactional(readOnly = true)
+    public void requireVisibleToTenant(UUID departmentId, UUID tenantId) {
+        Department department = departmentRepository.findById(departmentId)
+                .orElseThrow(() -> NotFoundException.of("Departament", departmentId));
+        if (department.getTenantId() != null && !tenantId.equals(department.getTenantId())) {
+            throw NotFoundException.of("Departament", departmentId);
+        }
+    }
+
     private DepartmentDetail toDetail(Department d) {
         long roles = roleRepository.countByDepartmentId(d.getId());
         return new DepartmentDetail(d.getId(), d.getTenantId(), d.getName(),

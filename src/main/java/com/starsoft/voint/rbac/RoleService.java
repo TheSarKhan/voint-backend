@@ -85,6 +85,25 @@ public class RoleService {
         return roles.stream().map(this::toDetail).toList();
     }
 
+    /** The platform templates a tenant may browse and copy - never its internal staff-only roles. */
+    @Transactional(readOnly = true)
+    public List<RoleDetail> templates() {
+        return roleRepository.findByTemplateTrueOrderByName().stream().map(this::toDetail).toList();
+    }
+
+    /**
+     * Guards the tenant self-service routes: confirms {@code roleId} is actually owned by
+     * {@code tenantId} before an update/delete touches it. 404 rather than 403 - a tenant should
+     * not learn that a role belonging to someone else exists at all.
+     */
+    @Transactional(readOnly = true)
+    public void requireOwnedByTenant(UUID roleId, UUID tenantId) {
+        Role role = roleRepository.findById(roleId).orElseThrow(() -> NotFoundException.of("Rol", roleId));
+        if (!tenantId.equals(role.getTenantId())) {
+            throw NotFoundException.of("Rol", roleId);
+        }
+    }
+
     /** A template department's own roles - the picklist shown before copying it into a tenant. */
     @Transactional(readOnly = true)
     public List<RoleDetail> detailsForDepartment(UUID departmentId) {
