@@ -379,11 +379,13 @@ public class VoiceWebhookService {
         }
         try {
             String vectorLiteral = VectorUtils.toPgVector(embedding);
-            return ragDocumentRepository
-                    .findNearestByTenant(tenantId, vectorLiteral, VectorUtils.MAX_COSINE_DISTANCE, RAG_TOP_K)
-                    .stream()
-                    .map(RagDocument::getContent)
-                    .toList();
+            List<RagDocument> matches = ragDocumentRepository
+                    .findNearestByTenant(tenantId, vectorLiteral, VectorUtils.MAX_COSINE_DISTANCE, RAG_TOP_K);
+            if (!matches.isEmpty()) {
+                // Best-effort: a failed stats bump must never turn into a failed answer to the caller.
+                ragDocumentRepository.recordHits(matches.stream().map(RagDocument::getId).toList());
+            }
+            return matches.stream().map(RagDocument::getContent).toList();
         } catch (Exception e) {
             log.error("RAG vector search failed for tenant {} - continuing without RAG context", tenantId, e);
             return List.of();
