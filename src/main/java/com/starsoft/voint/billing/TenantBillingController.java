@@ -14,5 +14,9 @@ public class TenantBillingController {
     private final BillingService billing;
     private final TenantAccessGuard access;
     @GetMapping @RequirePermission(resource = Permission.Resource.BILLING, action = Permission.Action.READ)
-    public List<BillingInvoiceResponse> list(@PathVariable UUID tenantId) { access.requireAccess(tenantId); return billing.invoicesFor(tenantId); }
+    public List<BillingInvoiceResponse> list(@PathVariable UUID tenantId) {
+        access.requireAccess(tenantId);
+        List<BillingInvoiceResponse> invoices = billing.invoicesFor(tenantId);
+        return access.isSuperAdmin() ? invoices : invoices.stream().map(BillingInvoiceResponse::withoutProviderCost).toList();
+    }
 }

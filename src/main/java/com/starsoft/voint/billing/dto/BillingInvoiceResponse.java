@@ -23,4 +23,11 @@ public record BillingInvoiceResponse(UUID id, UUID tenantId, String tenantName, 
                 i.getUsageMinutes(), i.getProviderCost(), i.getTotalAmount(), i.getLockedAt(), i.getSentAt(),
                 i.getPaidAt(), i.getCreatedAt());
     }
+
+    /** providerCost is what WE pay - a tenant reading their own invoice must never see it. */
+    public BillingInvoiceResponse withoutProviderCost() {
+        return new BillingInvoiceResponse(id, tenantId, tenantName, tenantSubdomain, period, status, dueDate,
+                monthlyFee, includedMinutes, overageMinutes, overagePerMinute, usageMinutes, null,
+                totalAmount, lockedAt, sentAt, paidAt, createdAt);
+    }
 }

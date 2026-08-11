@@ -40,6 +40,11 @@ public class TenantAccessGuard {
         }
     }
 
+    /** True for platform staff. Used to redact figures (provider cost, margin) a tenant must not see. */
+    public boolean isSuperAdmin() {
+        return currentUser().isSuperAdmin();
+    }
+
     private AuthenticatedUser currentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof AuthenticatedUser user)) {

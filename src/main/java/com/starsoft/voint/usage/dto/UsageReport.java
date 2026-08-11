@@ -27,6 +27,12 @@ public record UsageReport(
         BigDecimal marginPercent
 ) {
 
+    /** What we pay providers and what we make is ours to know - a tenant reading their own usage must not. */
+    public UsageReport withoutCost() {
+        return new UsageReport(tenantId, tenantName, tenantSubdomain, month, usage, null, plan,
+                invoiceAzn, null, null);
+    }
+
     /** Raw consumption, before any pricing is applied. */
     public record UsageTotals(
             long calls,

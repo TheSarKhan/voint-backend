@@ -51,7 +51,8 @@ public class UsageController {
     public UsageReport forTenant(@PathVariable UUID tenantId,
                                  @RequestParam(required = false) String month) {
         tenantAccessGuard.requireAccess(tenantId);
-        return usageService.reportFor(tenantId, month);
+        UsageReport report = usageService.reportFor(tenantId, month);
+        return tenantAccessGuard.isSuperAdmin() ? report : report.withoutCost();
     }
 
     @RequirePermission(resource = Permission.Resource.BILLING, action = Permission.Action.UPDATE)
