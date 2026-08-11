@@ -64,7 +64,12 @@ public class TenantController {
         return PageResponse.of(tenantService.search(q, pageable), TenantResponse::from);
     }
 
-    @RequirePermission(resource = Permission.Resource.TENANT, action = Permission.Action.READ, tenantScoped = false)
+    // SETTINGS, not TENANT: TENANT is platform-only (see Permission.Resource), so no tenant role -
+    // not even Sahib - could ever be granted it, and this endpoint is exactly how a tenant's own
+    // panel (Ayarlar) reads its own profile. tenantScoped defaults to true here, same as
+    // updateConfig() below; requireAccess() still runs in the body for the subdomain-lookup case,
+    // where the path variable isn't a UUID the interceptor can compare itself.
+    @RequirePermission(resource = Permission.Resource.SETTINGS, action = Permission.Action.READ)
     @GetMapping("/{key}")
     @Operation(summary = "Get a tenant by id or by subdomain")
     public TenantResponse get(@PathVariable String key) {
