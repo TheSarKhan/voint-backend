@@ -2,6 +2,7 @@ package com.starsoft.voint.voice;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -17,6 +18,8 @@ import com.starsoft.voint.crm.CallTranscript;
 import com.starsoft.voint.crm.CallTranscriptRepository;
 import com.starsoft.voint.crm.CustomerService;
 import com.starsoft.voint.question.CallAnalysisService;
+import com.starsoft.voint.tenant.Tenant;
+import com.starsoft.voint.tenant.TenantRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +45,7 @@ public class VapiEventService {
     private final CallAnalysisService callAnalysisService;
     private final CustomerService customerService;
     private final CallConcurrencyService callConcurrencyService;
+    private final TenantRepository tenantRepository;
 
     @Transactional
     public void handle(JsonNode body) {
@@ -130,19 +134,24 @@ public class VapiEventService {
     }
 
     /**
-     * BOOTSTRAP STAGE: same fallback as VoiceWebhookService - looks for
-     * message.call.metadata.tenantId/tenant_id, else the seeded CES tenant.
-     * TODO (later stage): real multi-tenant routing by the caller's dialed phone number.
+     * Same precedence as {@code VoiceWebhookService.resolveTenantId}: dialed number first (the
+     * real routing mechanism), then call metadata, then the seeded CES tenant as a last resort so
+     * an unmatched call still gets recorded instead of dropped.
      */
     private UUID resolveTenantId(JsonNode message) {
+        UUID byDialedNumber = resolveTenantIdByDialedNumber(message);
+        if (byDialedNumber != null) {
+            return byDialedNumber;
+        }
+
         JsonNode metadata = message.path("call").path("metadata");
         String raw = metadata.path("tenantId").asText(null);
         if (raw == null || raw.isBlank()) {
             raw = metadata.path("tenant_id").asText(null);
         }
         if (raw == null || raw.isBlank()) {
-            log.warn("No tenant metadata on end-of-call-report - falling back to the bootstrap default "
-                    + "CES tenant {}", DEFAULT_TENANT_ID);
+            log.warn("No tenant match by dialed number or metadata on end-of-call-report - falling back to "
+                    + "the bootstrap default CES tenant {}", DEFAULT_TENANT_ID);
             return DEFAULT_TENANT_ID;
         }
         try {
@@ -152,6 +161,28 @@ public class VapiEventService {
                     raw, DEFAULT_TENANT_ID);
             return DEFAULT_TENANT_ID;
         }
+    }
+
+    /** See {@code VoiceWebhookService.resolveTenantIdByDialedNumber} for why this never throws. */
+    private UUID resolveTenantIdByDialedNumber(JsonNode message) {
+        String dialed = message.path("call").path("phoneNumber").path("number").asText(null);
+        if (dialed == null || dialed.isBlank()) {
+            return null;
+        }
+        dialed = dialed.trim();
+        try {
+            Optional<Tenant> tenant = tenantRepository.findByPhoneNumber(dialed);
+            if (tenant.isEmpty() && !dialed.startsWith("+")) {
+                tenant = tenantRepository.findByPhoneNumber("+" + dialed);
+            }
+            if (tenant.isPresent()) {
+                return tenant.get().getId();
+            }
+            log.debug("Dialed number '{}' matched no tenant - trying metadata instead", dialed);
+        } catch (Exception e) {
+            log.warn("Tenant lookup by dialed number '{}' failed - trying metadata instead", dialed, e);
+        }
+        return null;
     }
 
     /**

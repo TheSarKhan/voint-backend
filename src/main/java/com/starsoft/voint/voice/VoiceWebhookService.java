@@ -5,8 +5,13 @@ import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -15,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starsoft.voint.llm.GeminiApiClient;
 import com.starsoft.voint.llm.LlmClient;
@@ -61,6 +67,21 @@ public class VoiceWebhookService {
 
     /** Sentence end (incl. Azerbaijani text) followed by whitespace — one speech unit per frame. */
     private static final Pattern SENTENCE = Pattern.compile("[^.!?\\n]*[.!?\\n]+\\s*");
+
+    private static final Pattern CYRILLIC = Pattern.compile("[\\u0400-\\u04FF]");
+
+    /** Azerbaijani-specific Latin letters — their presence rules out English even before Cyrillic is checked. */
+    private static final Pattern AZERBAIJANI_LETTERS = Pattern.compile("[əƏğĞıİöÖüÜçÇşŞ]");
+
+    /**
+     * Common short function words. Tuned for the few-word utterances a phone call actually
+     * produces ("hello, how much"), not for prose — a proper language-id model would be
+     * overkill for the length of text this ever sees.
+     */
+    private static final Set<String> ENGLISH_MARKERS = Set.of(
+            "the", "hello", "hi", "please", "thanks", "thank", "you", "what", "how",
+            "when", "where", "yes", "no", "and", "is", "are", "can", "could", "would",
+            "do", "does", "much", "many", "price", "cost", "hours", "open", "closed");
 
     private final ObjectMapper objectMapper;
     private final LlmClient llmClient;
@@ -150,7 +171,7 @@ public class VoiceWebhookService {
         }
 
         String userText = extractLastUserMessage(request.messages());
-        String language = detectLanguage(userText);
+        String language = detectLanguage(userText, tenant);
         List<String> ragContext = ragSearch(userText, language, tenantId);
         long ragDoneAt = System.currentTimeMillis();
         String prompt = buildPrompt(language, ragContext, request.messages(), tenant);
@@ -288,7 +309,7 @@ public class VoiceWebhookService {
 
         String userText = extractLastUserMessage(request.messages());
 
-        String language = detectLanguage(userText);
+        String language = detectLanguage(userText, tenant);
         List<String> ragContext = ragSearch(userText, language, tenantId);
         String prompt = buildPrompt(language, ragContext, request.messages(), tenant);
         LlmResult result = callLlm(prompt, userText);
@@ -318,20 +339,28 @@ public class VoiceWebhookService {
     }
 
     /**
-     * Resolves which tenant this call belongs to. BOOTSTRAP STAGE: looks for a top-level
-     * {@code tenant_id} field, then {@code call.metadata.tenantId}/{@code tenant_id}; if neither
-     * is present (or isn't a valid UUID), falls back to the seeded CES tenant and logs a warning.
-     * TODO (later stage): real multi-tenant routing by the caller's dialed phone number.
+     * Resolves which tenant this call belongs to.
+     *
+     * <p>Tries, in order: (1) the number the caller actually dialed, matched against
+     * {@code Tenant.phoneNumber} — the real routing mechanism, deterministic and independent of
+     * Vapi correctly propagating assistant config into the call; (2) a {@code tenant_id} carried
+     * as metadata (top-level, or under {@code call.metadata}) — how routing has worked since the
+     * single-tenant bootstrap; (3) the seeded CES tenant, logged as a warning, so an unmatched
+     * call still gets an answer instead of an error.
      */
     private UUID resolveTenantId(ChatCompletionRequest request) {
+        UUID byDialedNumber = resolveTenantIdByDialedNumber(request.call());
+        if (byDialedNumber != null) {
+            return byDialedNumber;
+        }
+
         String raw = request.tenantId();
         if (raw == null || raw.isBlank()) {
             raw = extractTenantIdFromCallMetadata(request.call());
         }
         if (raw == null || raw.isBlank()) {
-            log.warn("No tenant_id in webhook request (and none under call.metadata) - falling back to the "
-                    + "bootstrap default CES tenant {}. TODO: real multi-tenant routing by dialed phone number.",
-                    DEFAULT_TENANT_ID);
+            log.warn("No tenant match by dialed number or metadata - falling back to the bootstrap default "
+                    + "CES tenant {}", DEFAULT_TENANT_ID);
             return DEFAULT_TENANT_ID;
         }
         try {
@@ -341,6 +370,47 @@ public class VoiceWebhookService {
                     raw, DEFAULT_TENANT_ID);
             return DEFAULT_TENANT_ID;
         }
+    }
+
+    /**
+     * Matches the dialed number Vapi reports (typically {@code call.phoneNumber.number}, an
+     * E.164 string) against {@code Tenant.phoneNumber}. Deliberately never throws: a lookup miss
+     * or an unexpected payload shape just falls through to metadata-based resolution below, so a
+     * wrong guess about Vapi's field layout cannot break call routing, only leave it unimproved.
+     */
+    private UUID resolveTenantIdByDialedNumber(Map<String, Object> call) {
+        String dialed = extractDialedNumber(call);
+        if (dialed == null || dialed.isBlank()) {
+            return null;
+        }
+        try {
+            Optional<Tenant> tenant = tenantRepository.findByPhoneNumber(dialed);
+            if (tenant.isEmpty() && !dialed.startsWith("+")) {
+                tenant = tenantRepository.findByPhoneNumber("+" + dialed);
+            }
+            if (tenant.isPresent()) {
+                return tenant.get().getId();
+            }
+            log.debug("Dialed number '{}' matched no tenant - trying metadata instead", dialed);
+        } catch (Exception e) {
+            log.warn("Tenant lookup by dialed number '{}' failed - trying metadata instead", dialed, e);
+        }
+        return null;
+    }
+
+    private String extractDialedNumber(Map<String, Object> call) {
+        if (call == null) {
+            return null;
+        }
+        Object phoneNumber = call.get("phoneNumber");
+        if (phoneNumber instanceof Map<?, ?> phoneMap) {
+            Object number = phoneMap.get("number");
+            return number != null ? String.valueOf(number).trim() : null;
+        }
+        if (phoneNumber instanceof String s && !s.isBlank()) {
+            return s.trim();
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")
@@ -360,11 +430,52 @@ public class VoiceWebhookService {
     }
 
     /**
-     * TODO: real language detection (az/ru/en) - lightweight heuristic or model call.
-     * Bootstrap stub: always Azerbaijani.
+     * Lightweight heuristic, sized for a phone call's few-word utterances, not prose: Cyrillic
+     * script means Russian; Azerbaijani-specific letters (ə/ğ/ı/ö/ü/ç/ş) rule out English outright
+     * since they never appear in it; otherwise two or more common English function words tip it
+     * to English. Everything else defaults to Azerbaijani — the safe default for short, ambiguous
+     * Latin text, and the only choice when a tenant hasn't opted into the other two anyway.
+     *
+     * <p>Restricted to {@code tenant.languageConfig}'s "supported" list: a business that only
+     * configured az/ru must not have a misheard word switch the reply into English nobody there
+     * can act on.
      */
-    private String detectLanguage(String userText) {
+    private String detectLanguage(String userText, Tenant tenant) {
+        if (userText == null || userText.isBlank()) {
+            return "az";
+        }
+        Set<String> supported = supportedLanguages(tenant);
+        if (CYRILLIC.matcher(userText).find()) {
+            return supported.contains("ru") ? "ru" : "az";
+        }
+        if (AZERBAIJANI_LETTERS.matcher(userText).find()) {
+            return "az";
+        }
+        if (supported.contains("en")) {
+            long hits = Arrays.stream(userText.toLowerCase(Locale.ROOT).split("\\W+"))
+                    .filter(ENGLISH_MARKERS::contains)
+                    .count();
+            if (hits >= 2) {
+                return "en";
+            }
+        }
         return "az";
+    }
+
+    private Set<String> supportedLanguages(Tenant tenant) {
+        if (tenant == null || !StringUtils.hasText(tenant.getLanguageConfig())) {
+            return Set.of("az");
+        }
+        try {
+            JsonNode node = objectMapper.readTree(tenant.getLanguageConfig());
+            Set<String> languages = new HashSet<>();
+            node.path("supported").forEach(n -> languages.add(n.asText()));
+            return languages.isEmpty() ? Set.of("az") : languages;
+        } catch (Exception e) {
+            log.warn("Tenant {} has unparseable language_config '{}' - defaulting to Azerbaijani only",
+                    tenant.getId(), tenant.getLanguageConfig());
+            return Set.of("az");
+        }
     }
 
     /** Embeds userText and runs a tenant-scoped pgvector cosine-distance search for the top-k chunks. */

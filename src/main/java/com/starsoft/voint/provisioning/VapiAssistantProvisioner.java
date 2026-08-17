@@ -56,6 +56,17 @@ public class VapiAssistantProvisioner {
             "Nizami", "Xətai", "Yasamal", "Nərimanov",
             "manat", "qəpik", "salam", "sağ olun");
 
+    /**
+     * Said at the start of every call, before the tenant's own greeting - a business owner writing
+     * their greeting cannot be trusted to remember a compliance disclosure, and would have no
+     * reason to word it consistently even if they did. Vapi speaks {@code firstMessage} directly
+     * (it never goes through the custom-LLM webhook), so this is the one place a disclosure here
+     * is guaranteed to be said verbatim, not paraphrased or dropped by the LLM.
+     */
+    private static final String RECORDING_DISCLOSURE =
+            "Bildirmək istəyirəm ki, bu zəng keyfiyyət məqsədilə qeydə alınır və sizinlə süni intellekt "
+                    + "agenti danışır.";
+
     private final PlatformSettingsService settings;
     private final String publicBaseUrl;
     private final String webhookSecret;
@@ -127,9 +138,9 @@ public class VapiAssistantProvisioner {
         // the bootstrap tenant, i.e. answers out of the wrong company's knowledge base.
         assistant.put("metadata", Map.of("tenant_id", tenant.getId().toString()));
 
-        if (StringUtils.hasText(tenant.getGreetingText())) {
-            assistant.put("firstMessage", tenant.getGreetingText());
-        }
+        assistant.put("firstMessage", StringUtils.hasText(tenant.getGreetingText())
+                ? RECORDING_DISCLOSURE + " " + tenant.getGreetingText()
+                : RECORDING_DISCLOSURE);
         assistant.put("endCallMessage", "Zəng etdiyiniz üçün təşəkkür edirik, gözəl gün arzulayırıq!");
 
         assistant.put("model", model());

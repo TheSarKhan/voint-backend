@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.starsoft.voint.billing.dto.*;
@@ -14,8 +15,10 @@ import com.starsoft.voint.usage.TenantQuotaService;
 import com.starsoft.voint.usage.UsageService;
 import com.starsoft.voint.usage.dto.UsageReport;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /** Commercial catalogue and immutable monthly invoice snapshots. UsageService remains the pricing source. */
+@Slf4j
 @Service @RequiredArgsConstructor
 public class BillingService {
     private final BillingPlanRepository plans;
@@ -78,11 +81,7 @@ public class BillingService {
         YearMonth cursor = YearMonth.now();
         for (int i = 11; i >= 0; i--) {
             YearMonth ym = cursor.minusMonths(i);
-            BigDecimal revenue = usage.reportForAll(ym.toString()).stream()
-                    .filter(rep -> onPlanIds.contains(rep.tenantId()))
-                    .map(UsageReport::invoiceAzn)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            trend.add(new BillingPlanDetailResponse.MonthRevenue(ym.toString(), revenue));
+            trend.add(new BillingPlanDetailResponse.MonthRevenue(ym.toString(), revenueFor(ym, cursor, onPlanIds)));
         }
 
         return new BillingPlanDetailResponse(BillingPlanResponse.from(plan), onPlan.size(),
@@ -151,6 +150,70 @@ public class BillingService {
     public BillingInvoiceResponse lock(UUID id) {
         BillingInvoice i = invoice(id); if (i.getStatus() == InvoiceStatus.DRAFT) i.setStatus(InvoiceStatus.SENT);
         if (i.getLockedAt() == null) i.setLockedAt(Instant.now()); i.setUpdatedAt(Instant.now()); return BillingInvoiceResponse.from(invoices.save(i));
+    }
+
+    /** How many trailing months to check on every run - covers a missed run or a backlog from before this job existed. */
+    private static final int AUTO_CLOSE_LOOKBACK_MONTHS = 12;
+
+    /**
+     * Runs daily and snapshots+locks every elapsed month's invoice for every billing-enabled
+     * tenant. This is what makes "past month" mean something: {@link #generate} already refuses
+     * to touch a locked invoice, but nothing generated or locked one automatically before this -
+     * a month with no invoice row had nothing to protect it, so any view needing a number for it
+     * fell back to a live recompute against whatever the tenant's rate happens to be TODAY. A
+     * tariff change would then silently rewrite an already-invoiced month.
+     *
+     * <p>Checks the trailing {@value #AUTO_CLOSE_LOOKBACK_MONTHS} months, not just the one that
+     * just elapsed: idempotent (skips whatever is already locked) and self-healing, so a missed
+     * run or a backlog of months that predate this job both close out on the next run. Never
+     * touches the current (still-open) month.
+     */
+    @Scheduled(cron = "0 15 3 * * *")
+    @Transactional
+    public void closeElapsedMonths() {
+        YearMonth currentMonth = YearMonth.now();
+        List<Tenant> billable = tenants.findAll().stream().filter(Tenant::isBillingEnabled).toList();
+        int closed = 0;
+        for (int i = 1; i <= AUTO_CLOSE_LOOKBACK_MONTHS; i++) {
+            String period = currentMonth.minusMonths(i).toString();
+            for (Tenant t : billable) {
+                BillingInvoice existing = invoices.findByTenantIdAndPeriod(t.getId(), period).orElse(null);
+                if (existing != null && existing.getLockedAt() != null) continue;
+                try {
+                    lock(generate(t.getId(), period).id());
+                    closed++;
+                } catch (Exception e) {
+                    log.warn("Could not auto-close {} invoice for tenant {}", period, t.getId(), e);
+                }
+            }
+        }
+        if (closed > 0) log.info("Auto-closed {} tenant invoice(s) across the trailing {} months", closed, AUTO_CLOSE_LOOKBACK_MONTHS);
+    }
+
+    /**
+     * A past month's revenue is whatever was actually invoiced, not what today's rate would
+     * produce - so for any month before the current one, a tenant with a locked invoice
+     * contributes that frozen amount instead of a fresh {@link UsageService} calculation. Only
+     * tenants with no locked invoice yet for that period (e.g. before {@link #closeElapsedMonths}
+     * existed) fall back to a live number, and the still-open current month is always live.
+     */
+    private BigDecimal revenueFor(YearMonth month, YearMonth currentMonth, Set<UUID> onPlanIds) {
+        if (!month.isBefore(currentMonth)) {
+            return usage.reportForAll(month.toString()).stream()
+                    .filter(rep -> onPlanIds.contains(rep.tenantId()))
+                    .map(UsageReport::invoiceAzn)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+        Map<UUID, BillingInvoice> lockedByTenant = invoices.findByPeriodOrderByTotalAmountDesc(month.toString()).stream()
+                .filter(inv -> onPlanIds.contains(inv.getTenantId()) && inv.getLockedAt() != null)
+                .collect(Collectors.toMap(BillingInvoice::getTenantId, inv -> inv, (a, b) -> a));
+        BigDecimal invoiced = lockedByTenant.values().stream()
+                .map(BillingInvoice::getTotalAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal liveForUninvoiced = usage.reportForAll(month.toString()).stream()
+                .filter(rep -> onPlanIds.contains(rep.tenantId()) && !lockedByTenant.containsKey(rep.tenantId()))
+                .map(UsageReport::invoiceAzn)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return invoiced.add(liveForUninvoiced);
     }
 
     private void apply(BillingPlan p, BillingPlanRequest r) { p.setName(r.name().trim()); p.setMonthlyFee(r.monthlyFee()); p.setIncludedMinutes(r.includedMinutes()); p.setOveragePerMinute(r.overagePerMinute()); p.setMonthlyMinuteCap(r.monthlyMinuteCap()); p.setMaxConcurrentCalls(r.maxConcurrentCalls()); p.setDueDays(r.dueDays()); p.setActive(r.active()); p.setUpdatedAt(Instant.now()); }
