@@ -34,10 +34,22 @@ public class TelegramLinkService {
         return token;
     }
 
-    /** {@code https://t.me/<bot>?start=<token>} - null if the bot token isn't configured yet. */
+    /** {@code https://t.me/<bot>?start=<token>} - opens a private chat with the bot and links it. */
     public String buildDeepLink(String token) {
         String username = client.getBotUsername();
         return username != null ? "https://t.me/" + username + "?start=" + token : null;
+    }
+
+    /**
+     * {@code startgroup}, not {@code start}: this is what makes Telegram show a "choose a group to
+     * add this bot to" picker instead of opening a private chat. Once added, Telegram delivers the
+     * same token to the webhook as if someone had typed {@code /start <token>} in that group - no
+     * extra handling needed on our side, {@link TelegramWebhookController} already treats both the
+     * same way.
+     */
+    public String buildGroupDeepLink(String token) {
+        String username = client.getBotUsername();
+        return username != null ? "https://t.me/" + username + "?startgroup=" + token : null;
     }
 
     /** Consumes the token (single-use) and returns the tenant it belonged to, if it was still valid. */

@@ -33,16 +33,18 @@ public class TelegramLinkController {
 
     @RequirePermission(resource = Permission.Resource.SETTINGS, action = Permission.Action.READ)
     @PostMapping("/link")
-    @Operation(summary = "One-time link (t.me deep link, 15 min) to connect a new Telegram chat")
+    @Operation(summary = "One-time link (t.me deep link, 15 min) to connect a new Telegram chat - "
+            + "personal or group, whichever the tenant opens first (the token is single-use)")
     public LinkResponse createLink(@PathVariable("id") UUID tenantId) {
         tenantAccessGuard.requireAccess(tenantId);
         String token = linkService.createToken(tenantId);
         String deepLink = linkService.buildDeepLink(token);
-        if (deepLink == null) {
+        String groupDeepLink = linkService.buildGroupDeepLink(token);
+        if (deepLink == null || groupDeepLink == null) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Telegram bot hələ qurulmayıb - platform administratoru ilə əlaqə saxlayın");
         }
-        return new LinkResponse(deepLink);
+        return new LinkResponse(deepLink, groupDeepLink);
     }
 
     @RequirePermission(resource = Permission.Resource.SETTINGS, action = Permission.Action.READ)
@@ -63,7 +65,7 @@ public class TelegramLinkController {
         chats.findByIdAndTenantId(chatId, tenantId).ifPresent(chats::delete);
     }
 
-    public record LinkResponse(String deepLink) {
+    public record LinkResponse(String deepLink, String groupDeepLink) {
     }
 
     public record ChatResponse(UUID id, String label, java.time.Instant linkedAt) {
