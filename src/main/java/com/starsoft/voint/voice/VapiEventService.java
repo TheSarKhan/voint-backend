@@ -18,6 +18,7 @@ import com.starsoft.voint.crm.CallTranscript;
 import com.starsoft.voint.crm.CallTranscriptRepository;
 import com.starsoft.voint.crm.CustomerService;
 import com.starsoft.voint.question.CallAnalysisService;
+import com.starsoft.voint.telegram.TelegramNotifier;
 import com.starsoft.voint.tenant.Tenant;
 import com.starsoft.voint.tenant.TenantRepository;
 
@@ -46,6 +47,7 @@ public class VapiEventService {
     private final CustomerService customerService;
     private final CallConcurrencyService callConcurrencyService;
     private final TenantRepository tenantRepository;
+    private final TelegramNotifier telegramNotifier;
 
     @Transactional
     public void handle(JsonNode body) {
@@ -106,7 +108,18 @@ public class VapiEventService {
         log.info("Recorded end-of-call-report: call {} (tenant {}, caller {}, {}s, reason={})",
                 call.getId(), tenantId, callerNumber, call.getDurationSeconds(), endedReason);
 
+        notifyTelegram(tenantId, call, summary);
         scheduleAnalysis(tenantId, call.getId(), transcript);
+    }
+
+    /** Best-effort: a Telegram outage, or a tenant with nothing linked, must never affect call recording. */
+    private void notifyTelegram(UUID tenantId, Call call, String summary) {
+        try {
+            Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
+            telegramNotifier.notifyCallEnded(tenant, call, summary);
+        } catch (Exception e) {
+            log.warn("Telegram notification failed for call {} (tenant {})", call.getId(), tenantId, e);
+        }
     }
 
     /**

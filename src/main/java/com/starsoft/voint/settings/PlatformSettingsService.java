@@ -49,6 +49,9 @@ public class PlatformSettingsService {
     @Value("${voint.vapi.private-key:}")
     private String configuredVapiPrivateKey;
 
+    @Value("${voint.telegram.bot-token:}")
+    private String configuredTelegramBotToken;
+
     @Value("${voint.panel.domain:sarkhan.az}")
     private String configuredPanelDomain;
 
@@ -145,6 +148,9 @@ public class PlatformSettingsService {
             case ELEVENLABS_VOICE_ID -> nullSafe(configuredElevenLabsVoiceId);
             case GEMINI_API_KEY -> nullSafe(configuredGeminiKey);
             case VAPI_PRIVATE_KEY -> nullSafe(configuredVapiPrivateKey);
+            case TELEGRAM_BOT_TOKEN -> nullSafe(configuredTelegramBotToken);
+            // Never comes from server config - see the field's own javadoc.
+            case TELEGRAM_WEBHOOK_SECRET -> "";
             case PANEL_DOMAIN -> nullSafe(configuredPanelDomain);
             case SMTP_HOST -> nullSafe(configuredSmtpHost);
             case SMTP_PORT -> nullSafe(configuredSmtpPort);

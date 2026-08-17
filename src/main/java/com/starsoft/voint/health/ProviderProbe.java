@@ -98,6 +98,21 @@ public class ProviderProbe {
         }
     }
 
+    public Result telegram(String botToken) {
+        if (!StringUtils.hasText(botToken)) {
+            return Result.fail("Token boşdur");
+        }
+        try {
+            restClient.get()
+                    .uri("https://api.telegram.org/bot" + botToken + "/getMe")
+                    .retrieve()
+                    .toBodilessEntity();
+            return Result.ok("Bot tokeni qüvvədədir");
+        } catch (Exception e) {
+            return Result.fail("Telegram tokeni qəbul etmir: " + shortMessage(e));
+        }
+    }
+
     public Result vapi(String privateKey) {
         if (!StringUtils.hasText(privateKey)) {
             return Result.fail("Açar boşdur");

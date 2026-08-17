@@ -52,6 +52,7 @@ public class SettingsController {
     private final PlatformSettingsService settings;
     private final ProviderProbe probe;
     private final VapiSyncService vapiSync;
+    private final com.starsoft.voint.telegram.TelegramSyncService telegramSync;
     private final ProviderHealthService providerHealth;
     private final TenantAccessGuard tenantAccessGuard;
     private final com.starsoft.voint.mail.MailService mailService;
@@ -65,6 +66,11 @@ public class SettingsController {
 
         List<SettingView> out = new ArrayList<>();
         for (SettingKey key : SettingKey.values()) {
+            // System-managed, never hand-edited - see the key's own javadoc. Showing it here would
+            // just invite someone to "fix" a value that Telegram sync regenerates itself.
+            if (key == SettingKey.TELEGRAM_WEBHOOK_SECRET) {
+                continue;
+            }
             String effective = settings.get(key);
             PlatformSetting row = meta.get(key);
             out.add(new SettingView(
@@ -116,6 +122,18 @@ public class SettingsController {
                 // GlobalExceptionHandler#handleUpstream.
                 throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
                         "Vapi-yə ötürülmədi, ona görə dəyişiklik geri alındı: " + e.getMessage(), e);
+            }
+        }
+
+        // Same reasoning as the Vapi sync above: a bot token that verifies here but was never
+        // registered as a webhook would look healthy while no notification ever arrives.
+        if (settingKey == SettingKey.TELEGRAM_BOT_TOKEN) {
+            try {
+                telegramSync.registerWebhook();
+            } catch (com.starsoft.voint.telegram.TelegramClient.TelegramSyncException e) {
+                rollback(settingKey, hadOwnValue, previous);
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Telegram webhook qeydə alınmadı, ona görə dəyişiklik geri alındı: " + e.getMessage(), e);
             }
         }
 
@@ -223,6 +241,9 @@ public class SettingsController {
                     ? new ProviderProbe.Result(true, "Domen qəbul edildi")
                     : new ProviderProbe.Result(false,
                             "Yalnız domen yazın - protokol və əyri xətt olmadan. Məsələn: voint.az");
+            case TELEGRAM_BOT_TOKEN -> probe.telegram(value);
+            // Not reachable through the panel UI (filtered out of list()); accept if ever hit directly.
+            case TELEGRAM_WEBHOOK_SECRET -> new ProviderProbe.Result(true, "Yadda saxlanıldı");
         };
         if (!result.ok()) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, result.detail());

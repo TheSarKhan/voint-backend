@@ -51,6 +51,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/v1/voice/**",
+                                // Telegram's servers, not a panel - self-verified via the
+                                // X-Telegram-Bot-Api-Secret-Token header inside the controller.
+                                "/api/v1/telegram/webhook",
                                 "/api/v1/auth/login",
                                 // Panel bunu login-den EVVEL cagirir: hansi muessiseye aid
                                 // oldugunu bilmese, giris ekraninda adini yaza bilmez.

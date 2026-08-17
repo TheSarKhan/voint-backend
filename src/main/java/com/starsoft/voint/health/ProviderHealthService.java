@@ -32,6 +32,7 @@ public class ProviderHealthService {
     private static final String ELEVENLABS = "ElevenLabs";
     private static final String GEMINI = "Gemini";
     private static final String VAPI = "Vapi";
+    private static final String TELEGRAM = "Telegram";
 
     private final ProviderProbe probe;
     private final PlatformSettingsService settings;
@@ -40,7 +41,7 @@ public class ProviderHealthService {
 
     /** Current snapshot, in the order an operator wants to scan it. */
     public List<ProviderHealth> current() {
-        return List.of(snapshot(ELEVENLABS), snapshot(GEMINI), snapshot(VAPI));
+        return List.of(snapshot(ELEVENLABS), snapshot(GEMINI), snapshot(VAPI), snapshot(TELEGRAM));
     }
 
     private ProviderHealth snapshot(String name) {
@@ -63,6 +64,9 @@ public class ProviderHealthService {
 
         String vapiKey = settings.get(SettingKey.VAPI_PRIVATE_KEY);
         record(VAPI, vapiKey, () -> probe.vapi(vapiKey), "VAPI_PRIVATE_KEY");
+
+        String telegramToken = settings.get(SettingKey.TELEGRAM_BOT_TOKEN);
+        record(TELEGRAM, telegramToken, () -> probe.telegram(telegramToken), "Ayarlar səhifəsi");
     }
 
     private void record(String name, String credential, java.util.function.Supplier<ProviderProbe.Result> check,

@@ -26,6 +26,18 @@ public enum SettingKey {
     VAPI_PRIVATE_KEY("vapi.private-key", "Vapi private açarı", true,
             "Vapi konfiqurasiyasını bu paneldən yeniləmək üçün lazımdır."),
 
+    TELEGRAM_BOT_TOKEN("telegram.bot-token", "Telegram bot tokeni", true,
+            "Zəng nəticələrini müəssisələrə Telegram ilə göndərən bot. Yadda saxlanılanda "
+                    + "webhook avtomatik qeydiyyatdan keçir."),
+
+    /**
+     * Never typed by an operator - generated the first time a bot token is saved, so Telegram's
+     * webhook calls can be told apart from anyone who guesses the URL. Still a SettingKey (not a
+     * bare field) so it goes through the same encrypted storage as every other credential here.
+     */
+    TELEGRAM_WEBHOOK_SECRET("telegram.webhook-secret", "Telegram webhook sirri", true,
+            "Avtomatik yaradılır - əl ilə dəyişmə."),
+
     /**
      * Base domain the tenant panels live under: "sarkhan.az" serves ces.sarkhan.az.
      *
