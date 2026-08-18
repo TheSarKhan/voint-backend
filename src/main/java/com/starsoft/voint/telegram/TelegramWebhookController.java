@@ -63,7 +63,12 @@ public class TelegramWebhookController {
             return;
         }
 
-        String token = text.length() > 6 ? text.substring(6).trim() : "";
+        // A group-add (t.me/<bot>?startgroup=...) delivers the command as "/start@BotName <token>",
+        // not bare "/start <token>" the way a private chat does - Telegram disambiguates which bot
+        // a command is for once there's a group involved. Splitting on the first run of whitespace,
+        // rather than assuming a fixed "/start " prefix length, handles both shapes the same way.
+        String[] parts = text.trim().split("\\s+", 2);
+        String token = parts.length > 1 ? parts[1].trim() : "";
         if (token.isEmpty()) {
             client.sendMessage(chatId, "Salam! Bu bot Voint zəng bildirişləri üçündür. "
                     + "Qoşulmaq üçün panelinizdəki Ayarlar səhifəsindən link alın.");
@@ -72,6 +77,7 @@ public class TelegramWebhookController {
 
         UUID tenantId = linkService.consume(token);
         if (tenantId == null) {
+            log.info("Telegram link token rejected for chat {} (already used, expired, or malformed)", chatId);
             client.sendMessage(chatId, "Bu link artıq etibarsızdır (15 dəqiqədən sonra bitir). "
                     + "Panelinizdən yeni link alın.");
             return;
