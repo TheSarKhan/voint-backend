@@ -11,6 +11,7 @@ public record TenantConfigUpdateRequest(
         String languageConfig,
         String sttDomain,
         String sttTopic,
-        String sttVocabulary
+        String sttVocabulary,
+        String sttProvider
 ) {
 }

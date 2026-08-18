@@ -130,6 +130,18 @@ public class Tenant {
     @Column(name = "stt_vocabulary")
     private String sttVocabulary;
 
+    /**
+     * "soniox" (default) or "google" - which transcriber Vapi uses for this tenant's calls.
+     * Admin-only lever for A/B testing, not a business self-service setting: Soniox has a
+     * dedicated Azerbaijani mode with custom vocabulary; Google (via Vapi's default, pooled
+     * integration - no credential of ours involved) only has generic "Multilingual" mode for
+     * Azerbaijani, so this exists to compare them on a real tenant, not to become a real choice
+     * a tenant is expected to understand.
+     */
+    @Column(name = "stt_provider", nullable = false)
+    @Builder.Default
+    private String sttProvider = "soniox";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();

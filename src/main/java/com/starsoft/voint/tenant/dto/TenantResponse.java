@@ -30,6 +30,7 @@ public record TenantResponse(
         String sttDomain,
         String sttTopic,
         String sttVocabulary,
+        String sttProvider,
         Instant createdAt
 ) {
     public static TenantResponse from(Tenant t) {
@@ -40,6 +41,6 @@ public record TenantResponse(
                 t.getBillingLegalName(), t.getBillingTaxId(), t.getBillingEmail(), t.getBillingDueDays(),
                 t.getMaxConcurrentCalls(),
                 t.getVapiAssistantId(),
-                t.getSttDomain(), t.getSttTopic(), t.getSttVocabulary(), t.getCreatedAt());
+                t.getSttDomain(), t.getSttTopic(), t.getSttVocabulary(), t.getSttProvider(), t.getCreatedAt());
     }
 }

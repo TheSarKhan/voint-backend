@@ -112,6 +112,7 @@ public class TenantService {
         if (request.sttDomain() != null) tenant.setSttDomain(request.sttDomain());
         if (request.sttTopic() != null) tenant.setSttTopic(request.sttTopic());
         if (request.sttVocabulary() != null) tenant.setSttVocabulary(request.sttVocabulary());
+        if (request.sttProvider() != null) tenant.setSttProvider(request.sttProvider());
         tenant = tenantRepository.save(tenant);
         // The greeting and the transcriber hints live inside Vapi too; leaving them stale would
         // make the panel disagree with what callers actually hear.

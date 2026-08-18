@@ -57,6 +57,19 @@ public class VapiAssistantProvisioner {
             "manat", "qəpik", "salam", "sağ olun");
 
     /**
+     * Not "words the model doesn't know" - the opposite: these are the shortest, most acoustically
+     * ambiguous words in the language, and a call turning on the wrong one of them (a cancellation
+     * heard as a confirmation) is the worst possible transcription error. Boosting a short, fixed
+     * list of exactly these high-stakes tokens is a different move from padding the vocabulary with
+     * ordinary words - it exists to break ties in the model's favour on the words where a tie going
+     * the wrong way is expensive, not to teach it words it doesn't already know.
+     */
+    private static final List<String> CRITICAL_CONFIRMATION_WORDS = List.of(
+            "bəli", "xeyr", "hə", "yox", "yoxdur", "rədd", "rədd edirəm", "ləğv et",
+            "ləğv edirəm", "təsdiq", "təsdiqləyirəm", "tamam", "oldu", "düzdür", "səhvdir",
+            "istəmirəm", "istəyirəm");
+
+    /**
      * Said at the start of every call, before the tenant's own greeting - a business owner writing
      * their greeting cannot be trusted to remember a compliance disclosure, and would have no
      * reason to word it consistently even if they did. Vapi speaks {@code firstMessage} directly
@@ -188,6 +201,28 @@ public class VapiAssistantProvisioner {
     }
 
     private Map<String, Object> transcriber(Tenant tenant) {
+        if ("google".equals(tenant.getSttProvider())) {
+            return googleTranscriber();
+        }
+        return sonioxTranscriber(tenant);
+    }
+
+    /**
+     * A/B-test branch (see {@link Tenant#getSttProvider}). Vapi's default, pooled Google
+     * integration - no credential of ours involved, unlike every other provider block in this
+     * class. Azerbaijani has no dedicated mode in Vapi's Google transcriber, only "Multilingual"
+     * auto-detection - this is a real handicap next to Soniox's dedicated "az" mode, which is
+     * exactly why this needs a live comparison rather than a guess.
+     */
+    private Map<String, Object> googleTranscriber() {
+        Map<String, Object> transcriber = new LinkedHashMap<>();
+        transcriber.put("provider", "google");
+        transcriber.put("model", "gemini-2.0-flash");
+        transcriber.put("language", "Multilingual");
+        return transcriber;
+    }
+
+    private Map<String, Object> sonioxTranscriber(Tenant tenant) {
         Map<String, Object> transcriber = new LinkedHashMap<>();
         transcriber.put("provider", "soniox");
         transcriber.put("model", "stt-rt-v5");
@@ -214,6 +249,7 @@ public class VapiAssistantProvisioner {
     /** Shared Azerbaijani terms plus whatever this particular business deals in. */
     private List<String> vocabularyFor(Tenant tenant) {
         Set<String> words = new LinkedHashSet<>(SHARED_VOCABULARY);
+        words.addAll(CRITICAL_CONFIRMATION_WORDS);
         if (StringUtils.hasText(tenant.getSttVocabulary())) {
             Arrays.stream(tenant.getSttVocabulary().split(","))
                     .map(String::trim)
