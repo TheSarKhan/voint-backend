@@ -69,6 +69,7 @@ public class VapiEventService {
 
     private void recordEndOfCall(JsonNode message) {
         UUID tenantId = resolveTenantId(message);
+        Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
         String callerNumber = message.path("call").path("customer").path("number").asText(null);
         Instant startedAt = parseInstant(message.path("startedAt").asText(null));
         Instant endedAt = parseInstant(message.path("endedAt").asText(null));
@@ -108,17 +109,16 @@ public class VapiEventService {
         log.info("Recorded end-of-call-report: call {} (tenant {}, caller {}, {}s, reason={})",
                 call.getId(), tenantId, callerNumber, call.getDurationSeconds(), endedReason);
 
-        notifyTelegram(tenantId, call, summary);
-        scheduleAnalysis(tenantId, call.getId(), transcript);
+        notifyTelegram(tenant, call, summary);
+        scheduleAnalysis(tenantId, call.getId(), transcript, tenant != null ? tenant.getName() : null);
     }
 
     /** Best-effort: a Telegram outage, or a tenant with nothing linked, must never affect call recording. */
-    private void notifyTelegram(UUID tenantId, Call call, String summary) {
+    private void notifyTelegram(Tenant tenant, Call call, String summary) {
         try {
-            Tenant tenant = tenantRepository.findById(tenantId).orElse(null);
             telegramNotifier.notifyCallEnded(tenant, call, summary);
         } catch (Exception e) {
-            log.warn("Telegram notification failed for call {} (tenant {})", call.getId(), tenantId, e);
+            log.warn("Telegram notification failed for call {}", call.getId(), e);
         }
     }
 
@@ -130,7 +130,7 @@ public class VapiEventService {
      * analysis would write questions pointing at a call that, from its side, does not exist. And
      * if the transaction then rolled back, we would have analysed a call that never happened.
      */
-    private void scheduleAnalysis(UUID tenantId, UUID callId, String transcript) {
+    private void scheduleAnalysis(UUID tenantId, UUID callId, String transcript, String tenantName) {
         if (transcript == null || transcript.isBlank()) {
             return;
         }
@@ -138,11 +138,11 @@ public class VapiEventService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    callAnalysisService.analyzeAsync(tenantId, callId, transcript);
+                    callAnalysisService.analyzeAsync(tenantId, callId, transcript, tenantName);
                 }
             });
         } else {
-            callAnalysisService.analyzeAsync(tenantId, callId, transcript);
+            callAnalysisService.analyzeAsync(tenantId, callId, transcript, tenantName);
         }
     }
 

@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,8 +33,8 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class CallAnalysisService {
 
-    /** Xülasə + bir neçə sual üçün kifayətdir; danışıq büdcəsi (400) burada çox azdır. */
-    private static final int MAX_OUTPUT_TOKENS = 1200;
+    /** Xülasə + suallar + bütöv təmizlənmiş transkript (uzun zənglərdə bir neçə yüz söz ola bilər). */
+    private static final int MAX_OUTPUT_TOKENS = 4000;
 
     /**
      * Bu iş sadə oxu-çıxar işidir, mühakimə zənciri deyil — və telefonda olmadığımız üçün
@@ -67,8 +68,24 @@ public class CallAnalysisService {
             Cavabsız sual yoxdursa boş massiv qaytar. Sual UYDURMA — yalnız transkriptdə həqiqətən
             verilmiş sualları yaz.
 
+            3. TƏMİZLƏNMİŞ TRANSKRİPT: eyni söhbətin daha oxunaqlı yazısı — səs tanımanın (STT)
+               artefaktlarını təmizlə: yarımçıq kəsilmiş sözlər (məs. "Ba●", "Al●"), iki tərəfin
+               bir-birini kəsdiyi təkrarlar, mənasız/səhv tanınmış fraqmentlər. Məqsəd operatorun
+               əsl söhbəti rahat oxumasıdır.
+
+               MÜTLƏQ QAYDALAR:
+               - HEÇ NƏ UYDURMA. Yalnız orijinalda GERÇƏKDƏN deyilənləri aydın şəkildə yenidən yaz.
+               - Bir hissə həqiqətən anlaşılmazdırsa, təxmin ETMƏ — "[aydın deyil]" yaz və keç.
+               - Mənanı, faktları, rəqəmləri DƏYİŞMƏ — yalnız aydınlaşdır, tərcümə etmə, əlavə etmə.
+               - Danışan növbələrini qoru: hər sətir "Müştəri:" və ya "Agent:" ilə başlasın.
+               - Salamlaşma/sağollaşma kimi adi hissələri saxla, sadəcə səs-küy artefaktlarını çıxar.
+               - İSTİSNA: sənə aşağıda ŞİRKƏTİN DƏQİQ ADI verilib. Bu, təxmin deyil, bilinən
+                 faktdır — transkriptdə bu adın aydın səs-tanıma təhrifi görünürsə (məs. "Tez
+                 Texnika" əvəzinə "CES Texnika"), onu düzgün ada düzəlt. Başqa heç bir sözü bu
+                 formada "düzəltmə" — yalnız bu bir adı, çünki onu artıq bilirik.
+
             Cavabı bu JSON sxemində qaytar:
-            {"summary": "...", "unansweredQuestions": [{"question": "...", "context": "..."}]}
+            {"summary": "...", "unansweredQuestions": [{"question": "...", "context": "..."}], "cleanedTranscript": "..."}
 
             Bütün mətn Azərbaycan dilində olsun.
             """;
@@ -86,15 +103,15 @@ public class CallAnalysisService {
      * sonrakı əlavə işdir, uğursuzluğu zəng qeydini və ya webhook cavabını poza bilməz.
      */
     @Async("callAnalysisExecutor")
-    public void analyzeAsync(UUID tenantId, UUID callId, String transcript) {
+    public void analyzeAsync(UUID tenantId, UUID callId, String transcript, String tenantName) {
         try {
-            analyze(tenantId, callId, transcript);
+            analyze(tenantId, callId, transcript, tenantName);
         } catch (Exception e) {
             log.error("Call analysis failed for call {} (tenant {})", callId, tenantId, e);
         }
     }
 
-    void analyze(UUID tenantId, UUID callId, String transcript) {
+    void analyze(UUID tenantId, UUID callId, String transcript, String tenantName) {
         if (transcript == null || transcript.isBlank()) {
             writer.markFailed(callId, "transkript boşdur");
             return;
@@ -104,8 +121,11 @@ public class CallAnalysisService {
             return;
         }
 
+        String userMessage = StringUtils.hasText(tenantName)
+                ? "ŞİRKƏTİN DƏQİQ ADI: " + tenantName + "\n\nTRANSKRİPT:\n" + transcript
+                : transcript;
         GeminiApiClient.GenerationResult result =
-                geminiApiClient.generateJson(SYSTEM_PROMPT, transcript, MAX_OUTPUT_TOKENS, THINKING_BUDGET);
+                geminiApiClient.generateJson(SYSTEM_PROMPT, userMessage, MAX_OUTPUT_TOKENS, THINKING_BUDGET);
 
         JsonNode root;
         try {
@@ -119,6 +139,7 @@ public class CallAnalysisService {
         }
 
         String summary = root.path("summary").asText(null);
+        String cleanedTranscript = trimToNull(root.path("cleanedTranscript").asText(null));
         List<FoundQuestion> found = new ArrayList<>();
         JsonNode questions = root.path("unansweredQuestions");
         if (questions.isArray()) {
@@ -131,7 +152,7 @@ public class CallAnalysisService {
             }
         }
 
-        writer.save(tenantId, callId, summary, found);
+        writer.save(tenantId, callId, summary, cleanedTranscript, found);
         log.info("Analysed call {} (tenant {}): {} unanswered question(s), {} tokens",
                 callId, tenantId, found.size(), result.promptTokens() + result.completionTokens());
     }

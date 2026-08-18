@@ -41,7 +41,8 @@ public class CallAnalysisWriter {
      * fərqli vəziyyətlərdir və geriyə dönük doldurma yalnız ikincisinə toxunmalıdır.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void save(UUID tenantId, UUID callId, String summary, List<CallAnalysisService.FoundQuestion> found) {
+    public void save(UUID tenantId, UUID callId, String summary, String cleanedTranscript,
+                     List<CallAnalysisService.FoundQuestion> found) {
         for (CallAnalysisService.FoundQuestion q : found) {
             questionRepository.save(UnansweredQuestion.builder()
                     .tenantId(tenantId)
@@ -62,6 +63,9 @@ public class CallAnalysisWriter {
         // yazırıq - iki xülasəni yan-yana saxlamaq operatoru hansına baxacağını seçməyə məcbur edir.
         if (summary != null && !summary.isBlank()) {
             transcript.setAiSummary(summary);
+        }
+        if (cleanedTranscript != null && !cleanedTranscript.isBlank()) {
+            transcript.setCleanedTranscript(cleanedTranscript);
         }
         transcript.setAnalyzedAt(Instant.now());
         transcriptRepository.save(transcript);

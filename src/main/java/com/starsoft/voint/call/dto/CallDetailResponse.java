@@ -26,6 +26,8 @@ public record CallDetailResponse(
         Instant startedAt,
         Instant endedAt,
         String fullTranscript,
+        /** AI-təmizlənmiş, oxunaqlı versiya (STT artefaktları çıxarılıb) - null olarsa panel xam transkripti göstərir. */
+        String cleanedTranscript,
         String aiSummary,
         /** Zəngdən sonrakı təhlilin tapdığı, agentin cavablaya bilmədiyi suallar. */
         List<UnansweredQuestionResponse> unansweredQuestions
@@ -35,6 +37,7 @@ public record CallDetailResponse(
         return new CallDetailResponse(c.getId(), c.getTenantId(), c.getCallerNumber(), c.getLanguageDetected(),
                 c.getStatus(), c.getDurationSeconds(), c.getStartedAt(), c.getEndedAt(),
                 transcript != null ? transcript.getFullTranscript() : null,
+                transcript != null ? transcript.getCleanedTranscript() : null,
                 transcript != null ? transcript.getAiSummary() : null,
                 unansweredQuestions);
     }

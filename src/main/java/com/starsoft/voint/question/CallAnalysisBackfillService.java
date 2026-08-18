@@ -10,6 +10,7 @@ import com.starsoft.voint.call.Call;
 import com.starsoft.voint.call.CallRepository;
 import com.starsoft.voint.crm.CallTranscript;
 import com.starsoft.voint.crm.CallTranscriptRepository;
+import com.starsoft.voint.tenant.TenantRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ public class CallAnalysisBackfillService {
     private final CallTranscriptRepository transcriptRepository;
     private final CallRepository callRepository;
     private final CallAnalysisService analysisService;
+    private final TenantRepository tenantRepository;
 
     /**
      * @param limit bir dəfəyə neçə zəng — hamısını birdən növbəyə yığmaq icraçının növbəsini
@@ -45,7 +47,9 @@ public class CallAnalysisBackfillService {
                 log.warn("Transcript {} points at a missing call {}", transcript.getId(), transcript.getCallId());
                 continue;
             }
-            analysisService.analyzeAsync(call.getTenantId(), call.getId(), transcript.getFullTranscript());
+            String tenantName = tenantRepository.findById(call.getTenantId())
+                    .map(com.starsoft.voint.tenant.Tenant::getName).orElse(null);
+            analysisService.analyzeAsync(call.getTenantId(), call.getId(), transcript.getFullTranscript(), tenantName);
             queued++;
         }
         log.info("Queued {} call(s) for backfill analysis", queued);
