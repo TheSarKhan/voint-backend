@@ -1,11 +1,16 @@
 package com.starsoft.voint.health;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+
+import com.google.auth.oauth2.GoogleCredentials;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -95,6 +100,29 @@ public class ProviderProbe {
             return Result.ok("Açar qüvvədədir");
         } catch (Exception e) {
             return Result.fail("Gemini açarı qəbul etmir: " + shortMessage(e));
+        }
+    }
+
+    /**
+     * Parses the service-account JSON and asks Google for a real OAuth access token with it -
+     * a malformed JSON fails locally, a well-formed but revoked/wrong key fails against Google
+     * itself, and only a token that actually comes back means the key really works. Doesn't
+     * confirm Speech-to-Text access specifically (that needs a live streaming call, which the
+     * custom-transcriber bridge itself is the real test of) - this is the same-tier check the
+     * other probes here do: "is this credential alive," not "does every feature work."
+     */
+    public Result googleStt(String credentialsJson) {
+        if (!StringUtils.hasText(credentialsJson)) {
+            return Result.fail("JSON boşdur");
+        }
+        try {
+            GoogleCredentials credentials = GoogleCredentials
+                    .fromStream(new ByteArrayInputStream(credentialsJson.getBytes(StandardCharsets.UTF_8)))
+                    .createScoped(List.of("https://www.googleapis.com/auth/cloud-platform"));
+            credentials.refreshAccessToken();
+            return Result.ok("Kredensial qüvvədədir");
+        } catch (Exception e) {
+            return Result.fail("Google kredensialı qəbul etmir: " + shortMessage(e));
         }
     }
 

@@ -23,12 +23,32 @@
         <springdoc.version>2.7.0</springdoc.version>
         <pdfbox.version>3.0.3</pdfbox.version>
         <poi.version>5.3.0</poi.version>
+        <google-cloud-libraries-bom.version>26.51.0</google-cloud-libraries-bom.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Pins compatible versions for every com.google.cloud:* artifact (incl. the gRPC/protobuf
+                 transitive tree google-cloud-speech pulls in) - picking that library's version alone
+                 without this BOM is how you end up with mismatched grpc/protobuf on the classpath. -->
+            <dependency>
+                <groupId>com.google.cloud</groupId>
+                <artifactId>libraries-bom</artifactId>
+                <version>${google-cloud-libraries-bom.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -101,6 +121,14 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
+        </dependency>
+
+        <!-- Real Google Cloud Speech-to-Text (az-AZ) for the custom transcriber bridge - distinct
+             from Vapi's own "google" transcriber option, which turned out to run on Gemini, not
+             this product, and has no dedicated Azerbaijani mode. -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-speech</artifactId>
         </dependency>
 
         <!-- Knowledge-base file upload: extracting plain text out of what a tenant already has -->

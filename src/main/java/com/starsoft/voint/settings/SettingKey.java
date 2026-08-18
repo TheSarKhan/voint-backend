@@ -26,6 +26,14 @@ public enum SettingKey {
     VAPI_PRIVATE_KEY("vapi.private-key", "Vapi private açarı", true,
             "Vapi konfiqurasiyasını bu paneldən yeniləmək üçün lazımdır."),
 
+    /**
+     * The real Cloud Speech-to-Text product (dedicated az-AZ mode) - distinct from Vapi's own
+     * "google" transcriber option, which turned out to run on Gemini and has no dedicated
+     * Azerbaijani mode. Used only by our custom-transcriber WebSocket bridge, never sent to Vapi.
+     */
+    GOOGLE_STT_CREDENTIALS_JSON("google.stt-credentials-json", "Google STT service account (JSON)", true,
+            "Google Cloud service account-ın tam JSON məzmunu - custom transcriber körpüsü üçün."),
+
     TELEGRAM_BOT_TOKEN("telegram.bot-token", "Telegram bot tokeni", true,
             "Zəng nəticələrini müəssisələrə Telegram ilə göndərən bot. Yadda saxlanılanda "
                     + "webhook avtomatik qeydiyyatdan keçir."),

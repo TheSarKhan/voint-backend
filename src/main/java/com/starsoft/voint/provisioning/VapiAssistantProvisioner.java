@@ -193,7 +193,11 @@ public class VapiAssistantProvisioner {
         voice.put("style", 0.6);
         voice.put("similarityBoost", 0.95);
         voice.put("useSpeakerBoost", true);
-        voice.put("optimizeStreamingLatency", 0);
+        // 0-4: how hard ElevenLabs trades pronunciation quality for a faster time-to-first-audio-
+        // byte. 0 (the default) applies none of these optimizations - every call was paying the
+        // full synthesis latency. 2 is the commonly-recommended middle ground: real time-to-first-
+        // byte improvement without the audible quality loss level 3-4 start to introduce.
+        voice.put("optimizeStreamingLatency", 2);
         // ElevenLabs allows 0.7-1.2 (1.0 = normal pace); the default read as sluggish on a phone
         // call, where a pause reads as "did it hang up" rather than "thinking".
         voice.put("speed", 1.15);
@@ -208,18 +212,27 @@ public class VapiAssistantProvisioner {
     }
 
     /**
-     * A/B-test branch (see {@link Tenant#getSttProvider}). Vapi's default, pooled Google
-     * integration - no credential of ours involved, unlike every other provider block in this
-     * class. Azerbaijani has no dedicated mode in Vapi's Google transcriber, only "Multilingual"
-     * auto-detection - this is a real handicap next to Soniox's dedicated "az" mode, which is
-     * exactly why this needs a live comparison rather than a guess.
+     * A/B-test branch (see {@link Tenant#getSttProvider}). NOT Vapi's own "google" transcriber
+     * option - that turned out to run on Gemini, not real Speech-to-Text, and has no dedicated
+     * Azerbaijani mode. This points Vapi at our own custom-transcriber WebSocket bridge
+     * ({@link com.starsoft.voint.voice.CustomTranscriberWebSocketHandler}), which forwards audio
+     * to the real Google Cloud Speech-to-Text product in its dedicated az-AZ mode.
      */
     private Map<String, Object> googleTranscriber() {
         Map<String, Object> transcriber = new LinkedHashMap<>();
-        transcriber.put("provider", "google");
-        transcriber.put("model", "gemini-2.0-flash");
-        transcriber.put("language", "Multilingual");
+        transcriber.put("provider", "custom-transcriber");
+        Map<String, Object> server = new LinkedHashMap<>();
+        server.put("url", wsBaseUrl() + "/api/v1/voice/transcriber");
+        if (StringUtils.hasText(webhookSecret)) {
+            server.put("secret", webhookSecret);
+        }
+        transcriber.put("server", server);
         return transcriber;
+    }
+
+    /** {@code wss://} is to a WebSocket what {@code https://} is to a normal request - same host, different scheme. */
+    private String wsBaseUrl() {
+        return publicBaseUrl.replaceFirst("^https://", "wss://").replaceFirst("^http://", "ws://");
     }
 
     private Map<String, Object> sonioxTranscriber(Tenant tenant) {

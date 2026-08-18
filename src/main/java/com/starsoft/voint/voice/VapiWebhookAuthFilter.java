@@ -35,8 +35,12 @@ public class VapiWebhookAuthFilter extends OncePerRequestFilter {
     // /webhook and /chat/completions hit VoiceWebhookController.webhook() - /chat/completions exists
     // because Vapi's custom-LLM integration appends that suffix to the configured base URL. /events
     // hits VoiceWebhookController.events() - the assistant's separate "server" (call lifecycle) webhook.
+    // /transcriber is the custom-transcriber WebSocket bridge (CustomTranscriberWebSocketHandler) -
+    // the handshake is a plain HTTP GET before it upgrades, so this filter sees and can reject it
+    // exactly like any other request, before Spring's WebSocket machinery takes over.
     private static final Set<String> WEBHOOK_PATHS = Set.of(
             "/api/v1/voice/webhook",
+            "/api/v1/voice/transcriber",
             "/api/v1/voice/chat/completions",
             "/api/v1/voice/events");
 

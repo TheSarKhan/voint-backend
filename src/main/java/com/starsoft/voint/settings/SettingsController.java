@@ -242,6 +242,7 @@ public class SettingsController {
                     : new ProviderProbe.Result(false,
                             "Yalnız domen yazın - protokol və əyri xətt olmadan. Məsələn: voint.az");
             case TELEGRAM_BOT_TOKEN -> probe.telegram(value);
+            case GOOGLE_STT_CREDENTIALS_JSON -> probe.googleStt(value);
             // Not reachable through the panel UI (filtered out of list()); accept if ever hit directly.
             case TELEGRAM_WEBHOOK_SECRET -> new ProviderProbe.Result(true, "Yadda saxlanıldı");
         };
