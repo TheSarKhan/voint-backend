@@ -181,6 +181,9 @@ public class VapiAssistantProvisioner {
         voice.put("similarityBoost", 0.95);
         voice.put("useSpeakerBoost", true);
         voice.put("optimizeStreamingLatency", 0);
+        // ElevenLabs allows 0.7-1.2 (1.0 = normal pace); the default read as sluggish on a phone
+        // call, where a pause reads as "did it hang up" rather than "thinking".
+        voice.put("speed", 1.15);
         return voice;
     }
 
