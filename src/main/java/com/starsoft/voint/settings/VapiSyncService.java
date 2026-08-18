@@ -134,9 +134,12 @@ public class VapiSyncService {
             try {
                 // Merge rather than replace: stability, style and similarityBoost were tuned by
                 // ear for Azerbaijani, and sending a bare voice block would silently reset them.
+                // Keep every field as the JsonNode Vapi itself returned - stability/style/etc. are
+                // numbers, and coercing them through asText() sent Vapi the STRING "0" instead of
+                // the number 0, which it then rejected outright (was previously breaking every
+                // voice sync, not just this one).
                 var body = new java.util.HashMap<String, Object>();
-                voice.fields().forEachRemaining(e -> body.put(e.getKey(), e.getValue().isValueNode()
-                        ? e.getValue().asText() : e.getValue()));
+                voice.fields().forEachRemaining(e -> body.put(e.getKey(), e.getValue()));
                 body.put("voiceId", voiceId);
                 rest.patch()
                         .uri("/assistant/{id}", id)
