@@ -21,6 +21,19 @@ public interface CallRepository extends JpaRepository<Call, UUID> {
 
     long countByTenantIdAndCallerNumber(UUID tenantId, String callerNumber);
 
+    /** Dashboard analytics window - bounded, not the tenant's whole history. */
+    List<Call> findByTenantIdAndStartedAtBetweenOrderByStartedAtDesc(UUID tenantId, Instant from, Instant to);
+
+    long countByTenantIdAndStartedAtBetween(UUID tenantId, Instant from, Instant to);
+
+    long countByTenantIdAndStatusAndStartedAtBetween(UUID tenantId, CallStatus status, Instant from, Instant to);
+
+    @Query("select avg(c.durationSeconds) from Call c where c.tenantId = :tenantId and c.durationSeconds is not null "
+            + "and c.startedAt >= :from and c.startedAt < :to")
+    Double averageDurationSecondsBetween(@Param("tenantId") UUID tenantId,
+                                        @Param("from") Instant from,
+                                        @Param("to") Instant to);
+
     /** Platform-wide count in a half-open window - "how many calls today/this month, across every tenant". */
     long countByStartedAtBetween(Instant from, Instant to);
 

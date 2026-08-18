@@ -19,8 +19,13 @@ public record AnalyticsResponse(
         /** resolvedCalls / totalCalls, 0.0 when there are no calls. */
         double resolutionRate,
         double avgDurationSeconds,
-        /** Call counts for the last 7 days (oldest first), zero-filled for days with no calls. */
-        List<DayCount> callsByDay
+        /**
+         * Call counts across the requested window (oldest first), zero-filled for empty buckets.
+         * Each point's {@code date} is the bucket's first day - see {@code bucketDays} for how
+         * many days that bucket spans (1 = one point per day, 7 = one point per week).
+         */
+        List<DayCount> callsByDay,
+        int bucketDays
 ) {
     public record DayCount(LocalDate date, long count) {
     }

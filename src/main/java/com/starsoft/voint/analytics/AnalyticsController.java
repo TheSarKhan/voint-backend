@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.starsoft.voint.analytics.dto.AnalyticsResponse;
@@ -28,9 +29,11 @@ public class AnalyticsController {
 
     @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.READ)
     @GetMapping
-    @Operation(summary = "Call count, resolution rate and average duration for the tenant")
-    public AnalyticsResponse analytics(@PathVariable("id") UUID tenantId) {
+    @Operation(summary = "Call count, resolution rate and average duration for the tenant, "
+            + "over the last 7/30/90 days (defaults to 30)")
+    public AnalyticsResponse analytics(@PathVariable("id") UUID tenantId,
+                                       @RequestParam(required = false) Integer days) {
         tenantAccessGuard.requireAccess(tenantId);
-        return analyticsService.forTenant(tenantId);
+        return analyticsService.forTenant(tenantId, days);
     }
 }
