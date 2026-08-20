@@ -46,7 +46,7 @@ public class RagChatController {
     public RagChatReplyResponse chat(@PathVariable("id") UUID tenantId, @Valid @RequestBody RagChatRequest request) {
         tenantAccessGuard.requireAccess(tenantId);
         try {
-            return new RagChatReplyResponse(ragChatService.reply(request.history()));
+            return new RagChatReplyResponse(ragChatService.reply(tenantId, request.history()));
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage(), e);
         }
