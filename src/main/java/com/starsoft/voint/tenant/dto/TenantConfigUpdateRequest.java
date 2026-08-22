@@ -9,6 +9,7 @@ public record TenantConfigUpdateRequest(
         String workingHours,
         String handoffNumber,
         String languageConfig,
+        String industry,
         String sttDomain,
         String sttTopic,
         String sttVocabulary,

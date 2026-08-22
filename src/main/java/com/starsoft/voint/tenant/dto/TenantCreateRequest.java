@@ -11,6 +11,7 @@ public record TenantCreateRequest(
         String workingHours,
         String handoffNumber,
         String languageConfig,
+        String industry, // RENTAL, BEAUTY_SALON, RESTAURANT, CLINIC, AUTO_SERVICE, RETAIL, SERVICES
         /** What this business does - given to the transcriber, e.g. "Dis klinikasi". */
         String sttDomain,
         /** What callers usually ask about, so the transcriber picks the right homophone. */

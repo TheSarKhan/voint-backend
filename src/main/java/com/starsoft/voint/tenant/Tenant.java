@@ -142,6 +142,11 @@ public class Tenant {
     @Builder.Default
     private String sttProvider = "soniox";
 
+    /** Business category/industry: RENTAL, BEAUTY_SALON, RESTAURANT, CLINIC, AUTO_SERVICE, RETAIL, SERVICES */
+    @Column(name = "industry", nullable = false)
+    @Builder.Default
+    private String industry = "RENTAL";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();

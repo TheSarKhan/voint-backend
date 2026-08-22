@@ -15,6 +15,7 @@ public record TenantResponse(
         String workingHours,
         String handoffNumber,
         String languageConfig,
+        String industry,
         BigDecimal monthlyFee,
         Integer includedMinutes,
         BigDecimal overagePerMinute,
@@ -36,6 +37,7 @@ public record TenantResponse(
     public static TenantResponse from(Tenant t) {
         return new TenantResponse(t.getId(), t.getName(), t.getSubdomain(), t.getPhoneNumber(), t.getGreetingText(),
                 t.getWorkingHours(), t.getHandoffNumber(), t.getLanguageConfig(),
+                t.getIndustry(),
                 t.getMonthlyFee(), t.getIncludedMinutes(), t.getOveragePerMinute(),
                 t.getMonthlyMinuteCap(), t.getBillingPlanId(), t.isBillingEnabled(),
                 t.getBillingLegalName(), t.getBillingTaxId(), t.getBillingEmail(), t.getBillingDueDays(),

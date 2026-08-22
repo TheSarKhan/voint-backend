@@ -89,6 +89,7 @@ public class VoiceWebhookService {
     private final RagDocumentRepository ragDocumentRepository;
     private final TenantRepository tenantRepository;
     private final com.starsoft.voint.crm.CustomerRepository customerRepository;
+    private final com.starsoft.voint.catalog.CatalogService catalogService;
     private final PromptLoader promptLoader;
     private final UsageRecorder usageRecorder;
     private final TenantQuotaService tenantQuotaService;
@@ -174,6 +175,9 @@ public class VoiceWebhookService {
         String userText = extractLastUserMessage(request.messages());
         String language = detectLanguage(userText, tenant);
         List<String> ragContext = ragSearch(userText, language, tenantId);
+        List<com.starsoft.voint.catalog.CatalogItem> matchedCatalog = (tenant != null)
+                ? catalogService.findSimilar(tenantId, userText, 5)
+                : List.of();
         long ragDoneAt = System.currentTimeMillis();
 
         String callerNumber = extractCallerNumber(request.call());
@@ -181,7 +185,7 @@ public class VoiceWebhookService {
                 ? customerRepository.findByTenantIdAndPhoneNumber(tenantId, callerNumber).orElse(null)
                 : null;
 
-        String prompt = buildPrompt(language, ragContext, request.messages(), tenant, customer);
+        String prompt = buildPrompt(language, ragContext, matchedCatalog, request.messages(), tenant, customer);
 
         StringBuilder pending = new StringBuilder();
         StringBuilder spoken = new StringBuilder();
@@ -318,13 +322,16 @@ public class VoiceWebhookService {
 
         String language = detectLanguage(userText, tenant);
         List<String> ragContext = ragSearch(userText, language, tenantId);
+        List<com.starsoft.voint.catalog.CatalogItem> matchedCatalog = (tenant != null)
+                ? catalogService.findSimilar(tenantId, userText, 5)
+                : List.of();
 
         String callerNumber = extractCallerNumber(request.call());
         com.starsoft.voint.crm.Customer customer = (tenant != null && callerNumber != null && !callerNumber.isBlank())
                 ? customerRepository.findByTenantIdAndPhoneNumber(tenantId, callerNumber).orElse(null)
                 : null;
 
-        String prompt = buildPrompt(language, ragContext, request.messages(), tenant, customer);
+        String prompt = buildPrompt(language, ragContext, matchedCatalog, request.messages(), tenant, customer);
         LlmResult result = callLlm(prompt, userText);
 
         String answer = result.content();
@@ -524,7 +531,9 @@ public class VoiceWebhookService {
      * Concatenates: system-prompt.md + boundaries.md + tenant context + customer context (CRM)
      * + RAG context chunks + conversation history + target response language.
      */
-    private String buildPrompt(String language, List<String> ragContext, List<ChatMessage> history,
+    private String buildPrompt(String language, List<String> ragContext,
+                               List<com.starsoft.voint.catalog.CatalogItem> matchedCatalog,
+                               List<ChatMessage> history,
                                Tenant tenant, com.starsoft.voint.crm.Customer customer) {
         StringBuilder sb = new StringBuilder();
         sb.append(promptLoader.getSystemPrompt()).append("\n\n");
@@ -552,6 +561,29 @@ public class VoiceWebhookService {
                 sb.append("- Müştəri haqqında əvvəlki qeydlər: ").append(customer.getNotes()).append('\n');
             }
             sb.append('\n');
+        }
+
+        if (matchedCatalog != null && !matchedCatalog.isEmpty()) {
+            sb.append("RƏSMİ MƏHSUL, XİDMƏT VƏ QİYMƏT KATALOQU (ƏN DƏQİQ MƏNBƏ):\n");
+            for (com.starsoft.voint.catalog.CatalogItem item : matchedCatalog) {
+                String typeLabel = "SERVICE".equalsIgnoreCase(item.getItemType()) ? "Xidmət"
+                        : "FOOD_DRINK".equalsIgnoreCase(item.getItemType()) ? "Menyu / Yemək"
+                        : "RENTAL".equalsIgnoreCase(item.getItemType()) ? "İcarə / Texnika"
+                        : "Məhsul";
+                sb.append("- [").append(typeLabel).append("]: ").append(item.getName());
+                if (item.getCategory() != null) sb.append(" | Kateqoriya: ").append(item.getCategory());
+                if (item.getPrice() != null) sb.append(" | Qiymət: ").append(item.getPrice()).append(" ").append(item.getCurrency() != null ? item.getCurrency() : "AZN").append(" / ").append(item.getUnit() != null ? item.getUnit() : "ədəd");
+                if (item.getDurationMinutes() != null) sb.append(" | Müddət: ").append(item.getDurationMinutes()).append(" dəqiqə");
+                if (item.getPriceDaily() != null && (item.getPrice() == null || item.getPriceDaily().compareTo(item.getPrice()) != 0)) sb.append(" | Günlük: ").append(item.getPriceDaily()).append(" AZN");
+                if (item.getPriceMonthly() != null) sb.append(" | Aylıq: ").append(item.getPriceMonthly()).append(" AZN");
+                if (item.getPriceHourly() != null) sb.append(" | Saatlıq: ").append(item.getPriceHourly()).append(" AZN");
+                if (item.getDeposit() != null) sb.append(" | Depozit: ").append(item.getDeposit()).append(" AZN");
+                sb.append(" | Vəziyyət: ").append(item.isInStock() ? "Mövcuddur / Rezervasiya açıqdır (" + item.getStockQuantity() + " " + item.getUnit() + ")" : "Bitib / Məşğuldur / İcarədədir");
+                if (item.getSpecs() != null && !item.getSpecs().isBlank()) sb.append(" | Tərkib / Parametrlər: ").append(item.getSpecs());
+                if (item.getDescription() != null && !item.getDescription().isBlank()) sb.append(" | Təsvir: ").append(item.getDescription());
+                sb.append('\n');
+            }
+            sb.append("TƏLİMAT: Müştəri xidmət, menyu, məhsul, qiymət, müddət və ya mövcudluq soruşduqda MÜTLƏQ bu rəsmi kataloqdakı ən son dəqiq məlumatlara əsasən cavab ver.\n\n");
         }
 
         sb.append("MƏLUMAT BAZASI:\n");

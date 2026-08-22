@@ -38,6 +38,7 @@ public class TenantService {
                 .workingHours(request.workingHours())
                 .handoffNumber(request.handoffNumber())
                 .languageConfig(request.languageConfig())
+                .industry(request.industry() != null && !request.industry().isBlank() ? request.industry().trim() : "RENTAL")
                 .sttDomain(request.sttDomain())
                 .sttTopic(request.sttTopic())
                 .sttVocabulary(request.sttVocabulary())
@@ -109,6 +110,9 @@ public class TenantService {
         if (request.workingHours() != null) tenant.setWorkingHours(request.workingHours());
         if (request.handoffNumber() != null) tenant.setHandoffNumber(request.handoffNumber());
         if (request.languageConfig() != null) tenant.setLanguageConfig(request.languageConfig());
+        if (request.industry() != null && !request.industry().isBlank()) {
+            tenant.setIndustry(request.industry().trim());
+        }
         if (request.sttDomain() != null) tenant.setSttDomain(request.sttDomain());
         if (request.sttTopic() != null) tenant.setSttTopic(request.sttTopic());
         if (request.sttVocabulary() != null) tenant.setSttVocabulary(request.sttVocabulary());

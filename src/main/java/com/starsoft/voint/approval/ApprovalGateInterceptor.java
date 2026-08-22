@@ -47,6 +47,7 @@ public class ApprovalGateInterceptor implements HandlerInterceptor {
             "/api/v1/voice/");
 
     private final ApprovalService approvals;
+    private final com.starsoft.voint.rbac.PermissionResolver permissionResolver;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response,
@@ -69,6 +70,14 @@ public class ApprovalGateInterceptor implements HandlerInterceptor {
         AuthenticatedUser user = currentUser();
         if (user == null || user.tenantId() == null) {
             return true;
+        }
+
+        // Direct execution check: if the user's role has APPROVAL · CREATE (Direct execution permission), bypass hold!
+        var cachedUser = permissionResolver.currentUser(user.email()).orElse(null);
+        if (cachedUser != null && cachedUser.roleId() != null) {
+            if (permissionResolver.isAllowed(cachedUser.roleId(), Permission.Resource.APPROVAL, Permission.Action.CREATE)) {
+                return true;
+            }
         }
 
         RequirePermission required = method.getMethodAnnotation(RequirePermission.class);

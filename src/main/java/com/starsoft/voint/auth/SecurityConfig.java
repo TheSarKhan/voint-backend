@@ -37,6 +37,7 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
     private final VapiWebhookAuthFilter vapiWebhookAuthFilter;
+    private final com.starsoft.voint.integration.ApiKeyAuthFilter apiKeyAuthFilter;
     private final com.starsoft.voint.approval.ApprovalReplayFilter approvalReplayFilter;
 
     @Value("${voint.cors.allowed-origins:http://localhost:5173}")
@@ -51,6 +52,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/v1/voice/**",
+                                "/api/v1/external/**",
                                 // Telegram's servers, not a panel - self-verified via the
                                 // X-Telegram-Bot-Api-Secret-Token header inside the controller.
                                 "/api/v1/telegram/webhook",
@@ -78,6 +80,7 @@ public class SecurityConfig {
                 // 401 = who are you; 403 (from TenantAccessGuard) = I know you, you may not.
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(vapiWebhookAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 // Before the JWT filter: an approved operation is replayed with a one-shot secret
                 // instead of a token, and that secret authenticates it as the person who asked.

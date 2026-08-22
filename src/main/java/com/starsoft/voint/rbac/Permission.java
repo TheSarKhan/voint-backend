@@ -36,6 +36,7 @@ public final class Permission {
         RAG("Bilik bazası", false),
         BILLING("Hesablaşma", false),
         SETTINGS("Ayarlar", false),
+        CAMPAIGN("Kampaniyalar", false),
 
         /**
          * The approval queue. READ shows it; UPDATE decides on the entries in it - there is no

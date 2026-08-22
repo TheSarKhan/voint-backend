@@ -1,0 +1,16 @@
+package com.starsoft.voint.integration;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface TenantWebhookRepository extends JpaRepository<TenantWebhook, UUID> {
+
+    List<TenantWebhook> findByTenantId(UUID tenantId);
+
+    Optional<TenantWebhook> findFirstByTenantIdAndActiveTrue(UUID tenantId);
+}
