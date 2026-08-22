@@ -84,8 +84,12 @@ public class CallAnalysisService {
                  Texnika" əvəzinə "CES Texnika"), onu düzgün ada düzəlt. Başqa heç bir sözü bu
                  formada "düzəltmə" — yalnız bu bir adı, çünki onu artıq bilirik.
 
+            4. MÜŞTƏRİ ADI (customerName): əgər müştəri söhbət zamanı öz adını və ya soyadını açıq
+               dedisə (məs. "Mənim adım Rəşaddır", "Rəşad Əliyev", "Vüqar bəy"), onun adını
+               "customerName": "Rəşad Əliyev" kimi çıxar. Əgər deməyibsə null qaytar.
+
             Cavabı bu JSON sxemində qaytar:
-            {"summary": "...", "unansweredQuestions": [{"question": "...", "context": "..."}], "cleanedTranscript": "..."}
+            {"summary": "...", "customerName": "...", "unansweredQuestions": [{"question": "...", "context": "..."}], "cleanedTranscript": "..."}
 
             Bütün mətn Azərbaycan dilində olsun.
             """;
@@ -139,6 +143,7 @@ public class CallAnalysisService {
         }
 
         String summary = root.path("summary").asText(null);
+        String customerName = trimToNull(root.path("customerName").asText(null));
         String cleanedTranscript = trimToNull(root.path("cleanedTranscript").asText(null));
         List<FoundQuestion> found = new ArrayList<>();
         JsonNode questions = root.path("unansweredQuestions");
@@ -152,9 +157,9 @@ public class CallAnalysisService {
             }
         }
 
-        writer.save(tenantId, callId, summary, cleanedTranscript, found);
-        log.info("Analysed call {} (tenant {}): {} unanswered question(s), {} tokens",
-                callId, tenantId, found.size(), result.promptTokens() + result.completionTokens());
+        writer.save(tenantId, callId, summary, customerName, cleanedTranscript, found);
+        log.info("Analysed call {} (tenant {}): {} unanswered question(s), customerName='{}', {} tokens",
+                callId, tenantId, found.size(), customerName, result.promptTokens() + result.completionTokens());
     }
 
     private String trimToNull(String value) {

@@ -33,16 +33,15 @@ public class CallAnalysisWriter {
 
     private final UnansweredQuestionRepository questionRepository;
     private final CallTranscriptRepository transcriptRepository;
+    private final com.starsoft.voint.crm.CustomerRepository customerRepository;
+    private final com.starsoft.voint.call.CallRepository callRepository;
 
     /**
-     * Tapılan sualları yazır və zəngi "təhlil olunub" kimi işarələyir.
-     *
-     * <p>Sual tapılmasa da işarələmə edilir: "təhlil olundu, boşluq yoxdur" ilə "heç baxılmayıb"
-     * fərqli vəziyyətlərdir və geriyə dönük doldurma yalnız ikincisinə toxunmalıdır.
+     * Tapılan sualları yazır, müştəri adını zənginləşdirir və zəngi "təhlil olunub" kimi işarələyir.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void save(UUID tenantId, UUID callId, String summary, String cleanedTranscript,
-                     List<CallAnalysisService.FoundQuestion> found) {
+    public void save(UUID tenantId, UUID callId, String summary, String customerName,
+                     String cleanedTranscript, List<CallAnalysisService.FoundQuestion> found) {
         for (CallAnalysisService.FoundQuestion q : found) {
             questionRepository.save(UnansweredQuestion.builder()
                     .tenantId(tenantId)
@@ -51,6 +50,21 @@ public class CallAnalysisWriter {
                     .context(q.context())
                     .status(QuestionStatus.OPEN)
                     .build());
+        }
+
+        if (customerName != null && !customerName.isBlank()) {
+            callRepository.findById(callId).ifPresent(c -> {
+                if (c.getCallerNumber() != null && !c.getCallerNumber().isBlank()) {
+                    customerRepository.findByTenantIdAndPhoneNumber(tenantId, c.getCallerNumber()).ifPresent(cust -> {
+                        if (cust.getName() == null || cust.getName().isBlank() || cust.getName().equals(c.getCallerNumber())) {
+                            cust.setName(customerName);
+                            customerRepository.save(cust);
+                            log.info("Auto-assigned customer name '{}' to customer {} ({}) from call {}",
+                                    customerName, cust.getId(), cust.getPhoneNumber(), callId);
+                        }
+                    });
+                }
+            });
         }
 
         CallTranscript transcript = transcriptRepository.findByCallId(callId).orElse(null);

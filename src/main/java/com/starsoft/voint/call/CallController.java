@@ -16,8 +16,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.starsoft.voint.auth.TenantAccessGuard;
+import com.starsoft.voint.crm.Customer;
+import com.starsoft.voint.crm.CustomerRepository;
 import com.starsoft.voint.question.UnansweredQuestionService;
 import com.starsoft.voint.question.dto.UnansweredQuestionResponse;
 import com.starsoft.voint.call.dto.CallCreateRequest;
@@ -35,6 +39,7 @@ import lombok.RequiredArgsConstructor;
 public class CallController {
 
     private final CallService callService;
+    private final CustomerRepository customerRepository;
     private final UnansweredQuestionService questionService;
     private final TenantAccessGuard tenantAccessGuard;
 
@@ -43,10 +48,25 @@ public class CallController {
     @Operation(summary = "List calls of the tenant")
     public List<CallResponse> list(@PathVariable("id") UUID tenantId) {
         tenantAccessGuard.requireAccess(tenantId);
-        // Bir qruplaşdırma sorğusu - zəng başına ayrıca saymaq 27 zəngdə 27 sorğu deməkdir.
         Map<UUID, Long> openCounts = questionService.openCountByCall(tenantId);
-        return callService.list(tenantId).stream()
-                .map(c -> CallResponse.from(c, openCounts.getOrDefault(c.getId(), 0L)))
+        List<Call> calls = callService.list(tenantId);
+
+        Set<String> phoneNumbers = calls.stream()
+                .map(Call::getCallerNumber)
+                .filter(p -> p != null && !p.isBlank())
+                .collect(Collectors.toSet());
+
+        Map<String, Customer> customersByPhone = phoneNumbers.isEmpty() ? Map.of()
+                : customerRepository.findByTenantIdAndPhoneNumberIn(tenantId, phoneNumbers).stream()
+                    .collect(Collectors.toMap(Customer::getPhoneNumber, c -> c, (c1, c2) -> c1));
+
+        return calls.stream()
+                .map(c -> {
+                    Customer cust = c.getCallerNumber() != null ? customersByPhone.get(c.getCallerNumber()) : null;
+                    return CallResponse.from(c, openCounts.getOrDefault(c.getId(), 0L),
+                            cust != null ? cust.getId() : null,
+                            cust != null ? cust.getName() : null);
+                })
                 .toList();
     }
 
@@ -59,7 +79,13 @@ public class CallController {
         List<UnansweredQuestionResponse> questions = questionService.listByCall(call.getId()).stream()
                 .map(UnansweredQuestionResponse::from)
                 .toList();
-        return CallDetailResponse.from(call, callService.getTranscript(call.getId()), questions);
+        Customer customer = (call.getCallerNumber() != null && !call.getCallerNumber().isBlank())
+                ? customerRepository.findByTenantIdAndPhoneNumber(tenantId, call.getCallerNumber()).orElse(null)
+                : null;
+        return CallDetailResponse.from(call, callService.getTranscript(call.getId()), questions,
+                customer != null ? customer.getId() : null,
+                customer != null ? customer.getName() : null,
+                customer != null ? customer.getNotes() : null);
     }
 
     @RequirePermission(resource = Permission.Resource.CALL, action = Permission.Action.CREATE)

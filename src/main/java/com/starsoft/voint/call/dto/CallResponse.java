@@ -16,18 +16,23 @@ public record CallResponse(
         Instant startedAt,
         Instant endedAt,
         /**
-         * Bu zəngdə hələ bağlanmamış neçə cavabsız sual var. Siyahı ekranı zəngi məhz bununla
-         * işarələyir; sayı hər sətir üçün ayrıca sorğu ilə deyil, tək qruplaşdırma sorğusu ilə
-         * gəlir (bax UnansweredQuestionService.openCountByCall).
+         * Bu zəngdə hələ bağlanmamış neçə cavabsız sual var.
          */
-        long openQuestionCount
+        long openQuestionCount,
+        UUID customerId,
+        String customerName
 ) {
     public static CallResponse from(Call c) {
-        return from(c, 0L);
+        return from(c, 0L, null, null);
     }
 
     public static CallResponse from(Call c, long openQuestionCount) {
+        return from(c, openQuestionCount, null, null);
+    }
+
+    public static CallResponse from(Call c, long openQuestionCount, UUID customerId, String customerName) {
         return new CallResponse(c.getId(), c.getTenantId(), c.getCallerNumber(), c.getLanguageDetected(),
-                c.getStatus(), c.getDurationSeconds(), c.getStartedAt(), c.getEndedAt(), openQuestionCount);
+                c.getStatus(), c.getDurationSeconds(), c.getStartedAt(), c.getEndedAt(), openQuestionCount,
+                customerId, customerName);
     }
 }

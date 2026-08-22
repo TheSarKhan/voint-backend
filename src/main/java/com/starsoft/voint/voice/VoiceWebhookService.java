@@ -88,6 +88,7 @@ public class VoiceWebhookService {
     private final GeminiApiClient geminiApiClient;
     private final RagDocumentRepository ragDocumentRepository;
     private final TenantRepository tenantRepository;
+    private final com.starsoft.voint.crm.CustomerRepository customerRepository;
     private final PromptLoader promptLoader;
     private final UsageRecorder usageRecorder;
     private final TenantQuotaService tenantQuotaService;
@@ -174,7 +175,13 @@ public class VoiceWebhookService {
         String language = detectLanguage(userText, tenant);
         List<String> ragContext = ragSearch(userText, language, tenantId);
         long ragDoneAt = System.currentTimeMillis();
-        String prompt = buildPrompt(language, ragContext, request.messages(), tenant);
+
+        String callerNumber = extractCallerNumber(request.call());
+        com.starsoft.voint.crm.Customer customer = (tenant != null && callerNumber != null && !callerNumber.isBlank())
+                ? customerRepository.findByTenantIdAndPhoneNumber(tenantId, callerNumber).orElse(null)
+                : null;
+
+        String prompt = buildPrompt(language, ragContext, request.messages(), tenant, customer);
 
         StringBuilder pending = new StringBuilder();
         StringBuilder spoken = new StringBuilder();
@@ -311,7 +318,13 @@ public class VoiceWebhookService {
 
         String language = detectLanguage(userText, tenant);
         List<String> ragContext = ragSearch(userText, language, tenantId);
-        String prompt = buildPrompt(language, ragContext, request.messages(), tenant);
+
+        String callerNumber = extractCallerNumber(request.call());
+        com.starsoft.voint.crm.Customer customer = (tenant != null && callerNumber != null && !callerNumber.isBlank())
+                ? customerRepository.findByTenantIdAndPhoneNumber(tenantId, callerNumber).orElse(null)
+                : null;
+
+        String prompt = buildPrompt(language, ragContext, request.messages(), tenant, customer);
         LlmResult result = callLlm(prompt, userText);
 
         String answer = result.content();
@@ -507,7 +520,12 @@ public class VoiceWebhookService {
      * Concatenates: system-prompt.md + boundaries.md + tenant context (greeting/working hours/handoff)
      * + RAG context chunks (under "MƏLUMAT BAZASI:") + conversation history + target response language.
      */
-    private String buildPrompt(String language, List<String> ragContext, List<ChatMessage> history, Tenant tenant) {
+    /**
+     * Concatenates: system-prompt.md + boundaries.md + tenant context + customer context (CRM)
+     * + RAG context chunks + conversation history + target response language.
+     */
+    private String buildPrompt(String language, List<String> ragContext, List<ChatMessage> history,
+                               Tenant tenant, com.starsoft.voint.crm.Customer customer) {
         StringBuilder sb = new StringBuilder();
         sb.append(promptLoader.getSystemPrompt()).append("\n\n");
         sb.append(promptLoader.getBoundaries()).append("\n\n");
@@ -522,6 +540,19 @@ public class VoiceWebhookService {
             sb.append("- (tenant tapılmadı - ümumi cavab ver, lazım gələrsə insan operatora yönləndir)\n");
         }
         sb.append('\n');
+
+        if (customer != null) {
+            sb.append("ZƏNG EDƏN MÜŞTƏRİ PROFİLİ (CRM MƏLUMATI):\n");
+            sb.append("- Telefon nömrəsi: ").append(customer.getPhoneNumber()).append('\n');
+            if (customer.getName() != null && !customer.getName().isBlank()) {
+                sb.append("- Müştərinin adı: ").append(customer.getName()).append('\n');
+                sb.append("- Təlimat: Bu müştəri artıq qeydiyyatdadır. Ona adı ilə müraciət et (məsələn: 'Salam ").append(customer.getName()).append(" bəy/xanım').\n");
+            }
+            if (customer.getNotes() != null && !customer.getNotes().isBlank()) {
+                sb.append("- Müştəri haqqında əvvəlki qeydlər: ").append(customer.getNotes()).append('\n');
+            }
+            sb.append('\n');
+        }
 
         sb.append("MƏLUMAT BAZASI:\n");
         if (ragContext.isEmpty()) {
@@ -543,6 +574,25 @@ public class VoiceWebhookService {
 
         sb.append("CAVAB DİLİ: ").append(languageLabel(language)).append(" dilində, telefon danışığına uyğun tərzdə cavab ver.\n");
         return sb.toString();
+    }
+
+    public static String extractCallerNumber(Map<String, Object> call) {
+        if (call == null) {
+            return null;
+        }
+        Object customer = call.get("customer");
+        if (customer instanceof Map<?, ?> m) {
+            Object number = m.get("number");
+            if (number != null && !number.toString().isBlank()) {
+                return number.toString().trim();
+            }
+        }
+        Object phone = call.get("phoneNumber");
+        if (phone != null && !phone.toString().isBlank()) {
+            return phone.toString().trim();
+        }
+        Object caller = call.get("callerNumber");
+        return caller != null ? caller.toString().trim() : null;
     }
 
     private String orDash(String value) {
